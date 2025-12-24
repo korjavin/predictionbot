@@ -1,58 +1,46 @@
 # Continuity Ledger
 
 ## Goal (incl. success criteria)
-Complete Task 2: SQLite Persistence & User Economy
-- User data persists across Docker container restarts
-- Auto-registration with 1000 WSC welcome bonus
-- Transaction audit trail
+Complete Task 3: Market Creation & Listing
+- DB: markets table exists with correct schema
+- POST /api/markets creates a market with validation
+- Validation rejects past dates and invalid questions
+- UI displays list of markets
+- User can create and see new markets
 
 ## Constraints/Assumptions
 - Use pure Go SQLite driver (modernc.org/sqlite)
-- Balance stored in cents (1000 WSC = 100000)
-- Database at /app/data/market.db
+- Market status: ACTIVE, LOCKED, RESOLVING, FINALIZED
+- Question validation: 10-140 chars
+- ExpiresAt: Must be at least 1 hour in the future
+- Initial status set to ACTIVE
 
 ## Key decisions
-- WAL mode for concurrency
-- Idempotent welcome bonus (one-time only)
-- User context passed through auth middleware
+- Market list includes creator_name, pool_yes, pool_no placeholders
+- Frontend uses Vanilla JS with Telegram WebView styling
 
 ## State
 - Task 2: COMPLETED
+- Task 3: COMPLETED
 
 ## Done
-- Database infrastructure (internal/storage/sqlite.go, models.go)
-- Auth service auto-registration (internal/auth/auth.go)
-- GET /api/me endpoint (internal/handlers/me.go)
-- Frontend user display (web/app.js, web/index.html)
-- Docker volume config (docker-compose.yml, Dockerfile)
-- Persistence testing
+- Task 1: User auto-registration with auth
+- Task 2: SQLite persistence & user economy
+- Task 3: Market Creation & Listing
 
 ## Now
-- Awaiting user feedback on Task 2 completion
+- Awaiting user feedback on Task 3 completion
 
 ## Next
-- Proceed to Task 3 (Markets & Betting)
+- Task 4 (Betting System)
 
 ## Open questions
 - None
 
 ## Working set (files/ids/commands)
-- go.mod (sqlite dependency)
-- internal/storage/sqlite.go
-- internal/storage/models.go
-- internal/auth/auth.go
-- internal/handlers/me.go
-- web/app.js
-- web/index.html
-- docker-compose.yml
-- Dockerfile
-
----
-
-## 2025-12-24T14:15:00Z - Task 2 COMPLETED
-- SQLite persistence implemented with WAL mode
-- User auto-registration with 1000 WSC welcome bonus working
-- GET /api/me endpoint returns user profile and balance
-- Frontend displays user data and balance
-- Docker volumes configured for data persistence
-- All tests passed
+- internal/storage/models.go (Market struct)
+- internal/storage/sqlite.go (markets table + methods)
+- internal/handlers/markets.go (handlers)
+- cmd/main.go (route registration)
+- web/index.html (Create Market form + market feed)
+- web/app.js (renderMarkets + createMarket functions)

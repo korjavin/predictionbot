@@ -24,3 +24,34 @@ type Transaction struct {
 	Description string    `json:"description" db:"description"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
 }
+
+// MarketStatus represents the status of a market
+type MarketStatus string
+
+const (
+	MarketStatusActive     MarketStatus = "ACTIVE"
+	MarketStatusLocked     MarketStatus = "LOCKED"
+	MarketStatusResolving  MarketStatus = "RESOLVING"
+	MarketStatusFinalized  MarketStatus = "FINALIZED"
+)
+
+// Market represents a prediction market
+type Market struct {
+	ID         int64        `json:"id" db:"id"`
+	CreatorID  int64        `json:"creator_id" db:"creator_id"`
+	Question   string       `json:"question" db:"question"`
+	ImageURL   string       `json:"image_url,omitempty" db:"image_url"`
+	Status     MarketStatus `json:"status" db:"status"`
+	ExpiresAt  time.Time    `json:"expires_at" db:"expires_at"`
+	CreatedAt  time.Time    `json:"created_at" db:"created_at"`
+}
+
+// MarketResponse is the API response for a market
+type MarketResponse struct {
+	ID          int64  `json:"id"`
+	Question    string `json:"question"`
+	CreatorName string `json:"creator_name"`
+	ExpiresAt   string `json:"expires_at"`
+	PoolYes     int64  `json:"pool_yes"`
+	PoolNo      int64  `json:"pool_no"`
+}

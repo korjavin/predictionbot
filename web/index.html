@@ -5,51 +5,193 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Prediction Market</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
+            padding: 16px;
             background-color: var(--tg-theme-bg-color, #1a1a2e);
             color: var(--tg-theme-text-color, #ffffff);
         }
         #app {
-            text-align: center;
+            max-width: 500px;
+            margin: 0 auto;
         }
         .loading {
             font-size: 18px;
             color: var(--tg-theme-hint-color, #888888);
+            text-align: center;
+            padding: 40px 0;
         }
         #user-profile {
             display: none;
         }
         #user-profile h1 {
             font-size: 24px;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
         }
         .balance {
-            font-size: 20px;
-            padding: 15px 25px;
+            font-size: 18px;
+            padding: 12px 20px;
             border-radius: 12px;
             background-color: var(--tg-theme-secondary-bg-color, #16213e);
             color: var(--tg-theme-text-color, #ffffff);
+            margin-bottom: 20px;
         }
         .balance span {
             font-weight: bold;
             color: var(--tg-theme-button-color, #4ade80);
+        }
+        .btn {
+            display: inline-block;
+            width: 100%;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-bottom: 16px;
+            transition: opacity 0.2s;
+        }
+        .btn:active {
+            opacity: 0.7;
+        }
+        .btn-primary {
+            background-color: var(--tg-theme-button-color, #4ade80);
+            color: var(--tg-theme-button-text-color, #000000);
+        }
+        .btn-secondary {
+            background-color: var(--tg-theme-secondary-bg-color, #16213e);
+            color: var(--tg-theme-text-color, #ffffff);
+        }
+        .section-title {
+            font-size: 20px;
+            font-weight: 600;
+            margin: 24px 0 16px 0;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--tg-theme-hint-color, #888888);
+        }
+        /* Create Market Form */
+        #create-market-form {
+            display: none;
+            background-color: var(--tg-theme-secondary-bg-color, #16213e);
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+        }
+        #create-market-form.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: var(--tg-theme-hint-color, #aaaaaa);
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--tg-theme-hint-color, #888888);
+            border-radius: 8px;
+            background-color: var(--tg-theme-bg-color, #1a1a2e);
+            color: var(--tg-theme-text-color, #ffffff);
+            font-size: 16px;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--tg-theme-button-color, #4ade80);
+        }
+        .form-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        .form-buttons .btn {
+            margin-bottom: 0;
+        }
+        /* Market Feed */
+        #market-feed {
+            display: none;
+        }
+        #market-feed.active {
+            display: block;
+        }
+        .market-card {
+            background-color: var(--tg-theme-secondary-bg-color, #16213e);
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            text-align: left;
+        }
+        .market-question {
+            font-size: 16px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+        .market-meta {
+            font-size: 12px;
+            color: var(--tg-theme-hint-color, #888888);
+            display: flex;
+            justify-content: space-between;
+        }
+        .market-creator {
+            font-style: italic;
+        }
+        .no-markets {
+            text-align: center;
+            color: var(--tg-theme-hint-color, #888888);
+            padding: 20px;
+        }
+        .error-message {
+            color: #ff6b6b;
+            font-size: 14px;
+            margin-top: 8px;
+        }
+        .success-message {
+            color: var(--tg-theme-button-color, #4ade80);
+            font-size: 14px;
+            margin-top: 8px;
         }
     </style>
 </head>
 <body>
     <div id="app">
         <p class="loading">Loading...</p>
+        
         <div id="user-profile">
             <h1>Welcome, <span id="user-name">Loading...</span></h1>
             <div class="balance">
                 Balance: <span id="user-balance">---</span> WSC
+            </div>
+            
+            <button id="create-market-btn" class="btn btn-primary">Create Market</button>
+            
+            <!-- Create Market Form -->
+            <div id="create-market-form">
+                <div class="form-group">
+                    <label for="market-question">Question (10-140 characters)</label>
+                    <input type="text" id="market-question" placeholder="Will Bitcoin hit $100k by Jan 1st?">
+                </div>
+                <div class="form-group">
+                    <label for="market-deadline">Deadline</label>
+                    <input type="datetime-local" id="market-deadline">
+                </div>
+                <div id="form-message"></div>
+                <div class="form-buttons">
+                    <button id="submit-market-btn" class="btn btn-primary">Create</button>
+                    <button id="cancel-market-btn" class="btn btn-secondary">Cancel</button>
+                </div>
+            </div>
+            
+            <h2 class="section-title">Active Markets</h2>
+            <div id="market-feed">
+                <div id="markets-list"></div>
             </div>
         </div>
     </div>

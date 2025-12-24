@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -75,10 +76,25 @@ func runMigrations() error {
 		)
 	`
 
+	marketsTable := `
+		CREATE TABLE IF NOT EXISTS markets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			creator_id INTEGER NOT NULL,
+			question TEXT NOT NULL,
+			image_url TEXT,
+			status TEXT NOT NULL DEFAULT 'ACTIVE',
+			expires_at DATETIME NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (creator_id) REFERENCES users(id)
+		)
+	`
+
 	// Create indexes for better query performance
 	createIndexes := `
 		CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 		CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
+		CREATE INDEX IF NOT EXISTS idx_markets_status ON markets(status);
+		CREATE INDEX IF NOT EXISTS idx_markets_created_at ON markets(created_at);
 	`
 
 	_, err := db.Exec(usersTable)
@@ -87,6 +103,11 @@ func runMigrations() error {
 	}
 
 	_, err = db.Exec(transactionsTable)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(marketsTable)
 	if err != nil {
 		return err
 	}
@@ -194,4 +215,135 @@ func CreateUser(telegramID int64, username, firstName string) (*User, error) {
 
 	// Fetch and return the created user
 	return GetUserByTelegramID(telegramID)
+}
+
+// CreateMarket creates a new market
+func CreateMarket(creatorID int64, question string, expiresAt time.Time) (*Market, error) {
+	result, err := db.Exec(`
+		INSERT INTO markets (creator_id, question, status, expires_at)
+		VALUES (?, ?, 'ACTIVE', ?)
+	`, creatorID, question, expiresAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to insert market: %w", err)
+	}
+
+	marketID, err := result.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get last insert id: %w", err)
+	}
+
+	// Fetch and return the created market
+	return GetMarketByID(marketID)
+}
+
+// GetMarketByID retrieves a market by its ID
+func GetMarketByID(id int64) (*Market, error) {
+	var market Market
+	err := db.QueryRow(`
+		SELECT id, creator_id, question, image_url, status, expires_at, created_at
+		FROM markets
+		WHERE id = ?
+	`, id).Scan(
+		&market.ID,
+		&market.CreatorID,
+		&market.Question,
+		&market.ImageURL,
+		&market.Status,
+		&market.ExpiresAt,
+		&market.CreatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get market by id: %w", err)
+	}
+	return &market, nil
+}
+
+// ListActiveMarkets retrieves all active markets ordered by creation date (newest first)
+func ListActiveMarkets() ([]Market, error) {
+	rows, err := db.Query(`
+		SELECT id, creator_id, question, image_url, status, expires_at, created_at
+		FROM markets
+		WHERE status = 'ACTIVE'
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active markets: %w", err)
+	}
+	defer rows.Close()
+
+	var markets []Market
+	for rows.Next() {
+		var market Market
+		err := rows.Scan(
+			&market.ID,
+			&market.CreatorID,
+			&market.Question,
+			&market.ImageURL,
+			&market.Status,
+			&market.ExpiresAt,
+			&market.CreatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan market: %w", err)
+		}
+		markets = append(markets, market)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating markets: %w", err)
+	}
+
+	return markets, nil
+}
+
+// MarketWithCreator represents a market with creator name for API responses
+type MarketWithCreator struct {
+	ID          int64  `json:"id"`
+	Question    string `json:"question"`
+	CreatorName string `json:"creator_name"`
+	ExpiresAt   string `json:"expires_at"`
+	PoolYes     int64  `json:"pool_yes"`
+	PoolNo      int64  `json:"pool_no"`
+}
+
+// ListActiveMarketsWithCreator returns active markets with creator names
+func ListActiveMarketsWithCreator() ([]MarketWithCreator, error) {
+	rows, err := db.Query(`
+		SELECT m.id, m.question, COALESCE(u.first_name, 'Unknown'),
+		       m.expires_at, 0, 0
+		FROM markets m
+		LEFT JOIN users u ON m.creator_id = u.id
+		WHERE m.status = 'ACTIVE'
+		ORDER BY m.created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query active markets: %w", err)
+	}
+	defer rows.Close()
+
+	var markets []MarketWithCreator
+	for rows.Next() {
+		var market MarketWithCreator
+		err := rows.Scan(
+			&market.ID,
+			&market.Question,
+			&market.CreatorName,
+			&market.ExpiresAt,
+			&market.PoolYes,
+			&market.PoolNo,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan market: %w", err)
+		}
+		markets = append(markets, market)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating markets: %w", err)
+	}
+
+	return markets, nil
 }
