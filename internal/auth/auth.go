@@ -64,6 +64,13 @@ func ValidateInitData(initData string) (int64, error) {
 		return 0, fmt.Errorf("TELEGRAM_BOT_TOKEN not set")
 	}
 
+	// Debug: log bot token info (first 10 chars only for security)
+	tokenPreview := botToken
+	if len(tokenPreview) > 10 {
+		tokenPreview = tokenPreview[:10] + "..." + tokenPreview[len(tokenPreview)-4:]
+	}
+	log.Printf("[AUTH] Bot token preview: %s (length: %d)", tokenPreview, len(botToken))
+
 	// Create the data check string (sorted by key)
 	// IMPORTANT: The keys must be sorted alphabetically!
 	var dataCheckKeys []string
@@ -101,6 +108,7 @@ func ValidateInitData(initData string) (int64, error) {
 	secretKey := hmac.New(sha256.New, []byte(botToken))
 	secretKey.Write([]byte("WebAppData"))
 	secret := secretKey.Sum(nil)
+	log.Printf("[AUTH] Secret key (hex): %s", hex.EncodeToString(secret)[:32]+"...")
 
 	// Compute the expected hash: HMAC_SHA256(<secret>, <data_check_string>)
 	h := hmac.New(sha256.New, secret)
