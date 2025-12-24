@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"predictionbot/internal/logger"
 	"predictionbot/internal/storage"
@@ -15,6 +16,28 @@ import (
 func formatBalance(cents int64) string {
 	wsc := float64(cents) / 100.0
 	return fmt.Sprintf("%.2f WSC", wsc)
+}
+
+// escapeMarkdown escapes special characters for Telegram Markdown mode
+func escapeMarkdown(s string) string {
+	escaped := s
+	escaped = strings.ReplaceAll(escaped, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, "*", `\*`)
+	escaped = strings.ReplaceAll(escaped, "_", `\_`)
+	escaped = strings.ReplaceAll(escaped, "`", `\`)
+	escaped = strings.ReplaceAll(escaped, "[", `\[`)
+	escaped = strings.ReplaceAll(escaped, "]", `\]`)
+	escaped = strings.ReplaceAll(escaped, "(", `\(`)
+	escaped = strings.ReplaceAll(escaped, ")", `\)`)
+	escaped = strings.ReplaceAll(escaped, ">", `\>`)
+	escaped = strings.ReplaceAll(escaped, "#", `\#`)
+	escaped = strings.ReplaceAll(escaped, "+", `\+`)
+	escaped = strings.ReplaceAll(escaped, "-", `\-`)
+	escaped = strings.ReplaceAll(escaped, "=", `\=`)
+	escaped = strings.ReplaceAll(escaped, "|", `\|`)
+	escaped = strings.ReplaceAll(escaped, ".", `\.`)
+	escaped = strings.ReplaceAll(escaped, "!", `\!`)
+	return escaped
 }
 
 // StartBot initializes and starts the Telegram bot
@@ -147,7 +170,7 @@ func StartBot() {
 			user.FirstName,
 			func() string {
 				if user.Username != "" {
-					return user.Username
+					return escapeMarkdown(user.Username)
 				} else {
 					return "N/A"
 				}
