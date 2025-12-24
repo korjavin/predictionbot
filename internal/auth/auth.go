@@ -28,6 +28,13 @@ const (
 // ValidateInitData validates the Telegram initData string
 // It checks the HMAC-SHA256 signature and the auth_date
 func ValidateInitData(initData string) (int64, error) {
+	// Debug: log raw initData (first 300 chars)
+	if len(initData) > 300 {
+		log.Printf("[AUTH] Raw initData (first 300 chars): %s...", initData[:300])
+	} else {
+		log.Printf("[AUTH] Raw initData: %s", initData)
+	}
+
 	// Parse the initData string
 	parts := strings.Split(initData, "&")
 	if len(parts) == 0 {
