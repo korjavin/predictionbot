@@ -17,6 +17,7 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - WEB_APP_URL=${WEB_APP_URL}
       - PORT=8080
+      - CHANNEL_ID=${CHANNEL_ID}
     volumes:
       - ./data:/app/data
     restart: unless-stopped

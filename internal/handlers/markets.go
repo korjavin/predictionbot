@@ -113,6 +113,24 @@ func handleCreateMarket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Broadcast new market to public channel
+	go func() {
+		notificationService := service.GetNotificationService()
+		if notificationService != nil {
+			// Get creator name
+			user, err := storage.GetUserByID(userID)
+			creatorName := "Anonymous"
+			if err == nil && user != nil {
+				if user.Username != "" {
+					creatorName = "@" + user.Username
+				} else {
+					creatorName = user.FirstName
+				}
+			}
+			notificationService.PublishNewMarket(market, creatorName)
+		}
+	}()
+
 	questionPreview := req.Question
 	if len(questionPreview) > 50 {
 		questionPreview = questionPreview[:50]

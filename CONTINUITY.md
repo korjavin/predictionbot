@@ -3,23 +3,21 @@
 # Continuity Ledger
 
 ## Goal (incl. success criteria)
-Task 9: Bankruptcy Recovery ("The Mortgage") - COMPLETED
-- Users with balance < 100 cents can request a free bailout
-- 24-hour cooldown between bailouts
-- Bailout resets balance to 500 cents (5.00 WSC)
-- Transaction recorded as "BAILOUT" or "Mortgage"
-- Frontend shows "Take Mortgage" button when balance < 1.00
+Task 10: Public News Channel (Broadcasting) - IN PROGRESS
+- Broadcast new markets to a Telegram channel
+- Broadcast market resolutions to the channel
+- CHANNEL_ID environment variable configuration
 
 ## Constraints/Assumptions
-- Bailout amount is less than welcome bonus (500 vs 1000 WSC) to encourage valuing capital
-- No new database table needed - use existing transactions table
-- Cooldown checked against last BAILOUT transaction timestamp
+- Extends existing NotificationService to avoid duplication
+- Uses goroutines for non-blocking broadcasts
+- Gracefully handles missing CHANNEL_ID (no-op)
 
 ## Key decisions
-- BAILOUT source type added to Transaction model
-- Fixed bailout amount: 50000 cents (500 WSC)
-- Cooldown: 24 hours from last bailout
-- Eligibility threshold: balance < 100 cents
+- Added channelID field to NotificationService struct
+- Created global notification service getter (SetNotificationService/GetNotificationService)
+- Added PublishNewMarket and PublishResolution methods
+- Message formats use Telegram Markdown for bold/emoji support
 
 ## State
 - Task 2: COMPLETED
@@ -30,6 +28,7 @@ Task 9: Bankruptcy Recovery ("The Mortgage") - COMPLETED
 - Task 7: COMPLETED
 - Task 8: COMPLETED
 - Task 9: COMPLETED
+- Task 10: IN PROGRESS
 
 ## Done
 - Task 1: User auto-registration with auth
@@ -43,46 +42,32 @@ Task 9: Bankruptcy Recovery ("The Mortgage") - COMPLETED
 - Task 9: Bankruptcy Recovery ("The Mortgage")
 
 ## Now
-- Task 9 implementation complete, ready for testing
+- Task 10 implementation in progress
+- Broadcasting new markets and resolutions to public channel
 
 ## Next
-- Testing & Polishing
-- Task 10 (if applicable)
+- Test broadcasting functionality with real Telegram channel
 
 ## Open questions
 - None
 
 ## Working set (files/ids/commands)
-- internal/handlers/me.go (HandleBailout endpoint)
-- internal/storage/sqlite.go (GetLastBailout, ExecuteBailout)
-- internal/storage/models.go (BailoutResult, BailoutError models)
-- cmd/main.go (route registration)
-- web/app.js (takeMortgage, renderMortgageButton functions)
-- web/index.html (mortgage button UI)
+- internal/service/notification.go (broadcaster methods)
+- internal/handlers/markets.go (broadcast on market creation)
+- internal/service/payout.go (broadcast on resolution)
+- cmd/main.go (global notification service setup)
+- docker-compose.yml (CHANNEL_ID env var)
 
-## 2024-12-24 - Bankruptcy Recovery / Mortgage (Task 9 - COMPLETED)
-- Added BailoutAmount constant (50000 cents = 500 WSC)
-- Added BailoutCooldown constant (24 hours)
-- Added BailoutBalanceThreshold constant (100 cents)
-- Created GetLastBailout(userID) to check last bailout timestamp
-- Created ExecuteBailout(userID) with ACID transaction:
-  - Validates balance < 100 cents
-  - Checks 24-hour cooldown
-  - Updates user balance to 50000 cents
-  - Creates BAILOUT transaction record
-- Created HandleBailout POST /api/me/bailout endpoint:
-  - Returns 400 if balance_too_high
-  - Returns 429 with cooldown message if cooldown_active
-  - Returns 200 with new_balance on success
-- Added BailoutResult and BailoutError response models
-- Registered route in cmd/main.go
-- Added mortgage button UI in Profile tab:
-  - Styled with orange background (.btn-mortgage)
-  - Hidden by default, shown when balance < 1.00
-  - Helper text: "Get 5.00 WSC free (once per 24h)"
-- Added JavaScript functions:
-  - renderMortgageButton() - Shows/hides button based on balance
-  - handleMortgageClick() - Handles button click with loading state
-  - takeMortgage() - Calls /api/me/bailout endpoint
-- Updated displayUserProfile() to call renderMortgageButton()
-- Haptic feedback on success/error for better UX
+## 2024-12-24 - Public News Channel / Broadcasting (Task 10 - IN PROGRESS)
+- Added channelID field to NotificationService struct
+- Added SetNotificationService/GetNotificationService global functions
+- Added PublishNewMarket() method for broadcasting new markets:
+  - Message format: 🆕 *New Market Created* with market ID, question, creator, expiry
+- Added PublishResolution() method for broadcasting resolutions:
+  - Message format: 🏁 *Market Resolved* with outcome and total pool
+- Added parseChannelID() helper (supports @username and -1001234567890 formats)
+- Added escapeMarkdown() helper for Telegram Markdown formatting
+- Integrated broadcasting into handleCreateMarket() via goroutine
+- Integrated broadcasting into payoutService.ResolveMarket() via goroutine
+- Added CHANNEL_ID environment variable to docker-compose.yml
+- Broadcasting is optional (skips if CHANNEL_ID not set)

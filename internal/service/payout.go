@@ -71,6 +71,23 @@ func (s *PayoutService) ResolveMarket(ctx context.Context, marketID, creatorID i
 
 	logger.Debug(creatorID, "market_resolved", fmt.Sprintf("market_id=%d outcome=%s", marketID, outcome))
 
+	// Broadcast resolution to public channel
+	go func() {
+		notificationService := GetNotificationService()
+		if notificationService != nil {
+			// Get market details for broadcasting
+			var question string
+			var poolYes, poolNo int64
+			db := storage.DB()
+			if db != nil {
+				_ = db.QueryRowContext(ctx, `SELECT question FROM markets WHERE id = ?`, marketID).Scan(&question)
+				poolYes, poolNo, _ = storage.GetPoolTotals(marketID)
+			}
+			totalPool := poolYes + poolNo
+			notificationService.PublishResolution(marketID, question, outcome, totalPool)
+		}
+	}()
+
 	return nil
 }
 

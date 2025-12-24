@@ -43,6 +43,8 @@ func main() {
 		// Continue without notifications - the bot can still function
 	} else {
 		log.Println("Notification service initialized")
+		// Set global notification service for use in handlers
+		service.SetNotificationService(notificationService)
 	}
 
 	// Start market worker for auto-locking expired markets

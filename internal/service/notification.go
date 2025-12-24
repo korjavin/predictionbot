@@ -14,11 +14,25 @@ import (
 	"gopkg.in/telebot.v3"
 )
 
+// Global notification service instance
+var globalNotificationService *NotificationService
+
+// SetNotificationService sets the global notification service
+func SetNotificationService(ns *NotificationService) {
+	globalNotificationService = ns
+}
+
+// GetNotificationService returns the global notification service
+func GetNotificationService() *NotificationService {
+	return globalNotificationService
+}
+
 // NotificationService handles sending Telegram notifications
 type NotificationService struct {
-	bot     *telebot.Bot
-	mu      sync.Mutex
-	adminID int64
+	bot       *telebot.Bot
+	mu        sync.Mutex
+	adminID   int64
+	channelID string
 }
 
 // NewNotificationService creates a new notification service
@@ -42,9 +56,13 @@ func NewNotificationService() (*NotificationService, error) {
 		adminID, _ = strconv.ParseInt(adminIDStr, 10, 64)
 	}
 
+	// Get channel ID from environment
+	channelID := os.Getenv("CHANNEL_ID")
+
 	return &NotificationService{
-		bot:     b,
-		adminID: adminID,
+		bot:       b,
+		adminID:   adminID,
+		channelID: channelID,
 	}, nil
 }
 
@@ -162,4 +180,113 @@ func truncateString(s string, maxLen int) string {
 // GetBot returns the underlying telebot instance (for bot commands)
 func (s *NotificationService) GetBot() *telebot.Bot {
 	return s.bot
+}
+
+// --- Broadcaster Methods for Public News Channel ---
+
+// PublishNewMarket broadcasts a new market to the public channel
+func (s *NotificationService) PublishNewMarket(market *storage.Market, creatorName string) {
+	if s.channelID == "" {
+		// Channel not configured, skip broadcasting
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Format expiration date
+	expiresAt := market.ExpiresAt.Format("2006-01-02 15:04")
+
+	message := fmt.Sprintf("🆕 *New Market Created*\n\n*#%d* %s\n\n👤 Creator: %s\n⏰ Ends: %s\n\n🎯 Place your bets!",
+		market.ID,
+		escapeMarkdown(market.Question),
+		escapeMarkdown(creatorName),
+		expiresAt)
+
+	// Send to channel
+	recipient := s.getChannelRecipient()
+	_, err := s.bot.Send(recipient, message, &telebot.SendOptions{
+		ParseMode: telebot.ModeMarkdown,
+	})
+	if err != nil {
+		logger.Debug(0, "broadcast_error", fmt.Sprintf("failed to publish new market: %v", err))
+		log.Printf("Failed to publish new market to channel %s: %v", s.channelID, err)
+	} else {
+		logger.Debug(0, "broadcast_new_market", fmt.Sprintf("market_id=%d", market.ID))
+	}
+}
+
+// PublishResolution broadcasts a market resolution to the public channel
+func (s *NotificationService) PublishResolution(marketID int64, question string, outcome string, totalPool int64) {
+	if s.channelID == "" {
+		// Channel not configured, skip broadcasting
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Format outcome emoji
+	outcomeEmoji := "✅"
+	if outcome == "NO" {
+		outcomeEmoji = "❌"
+	}
+
+	message := fmt.Sprintf("🏁 *Market Resolved*\n\n*#%d* %s\n\n%s Outcome: *%s*\n💰 Total Pool: %s\n\nCongratulations to the winners!",
+		marketID,
+		escapeMarkdown(truncateString(question, 80)),
+		outcomeEmoji,
+		outcome,
+		formatBalance(totalPool))
+
+	// Send to channel
+	recipient := s.getChannelRecipient()
+	_, err := s.bot.Send(recipient, message, &telebot.SendOptions{
+		ParseMode: telebot.ModeMarkdown,
+	})
+	if err != nil {
+		logger.Debug(0, "broadcast_error", fmt.Sprintf("failed to publish resolution: %v", err))
+		log.Printf("Failed to publish resolution to channel %s: %v", s.channelID, err)
+	} else {
+		logger.Debug(0, "broadcast_resolution", fmt.Sprintf("market_id=%d outcome=%s", marketID, outcome))
+	}
+}
+
+// getChannelRecipient returns the appropriate recipient for the configured channel
+func (s *NotificationService) getChannelRecipient() telebot.Recipient {
+	if strings.HasPrefix(s.channelID, "@") {
+		return &telebot.Chat{Username: s.channelID}
+	}
+	return &telebot.Chat{ID: parseChannelID(s.channelID)}
+}
+
+// parseChannelID parses a channel ID string (supports numeric IDs)
+func parseChannelID(channelID string) int64 {
+	id, err := strconv.ParseInt(channelID, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return id
+}
+
+// escapeMarkdown escapes special characters for Telegram Markdown mode
+func escapeMarkdown(s string) string {
+	escaped := s
+	escaped = strings.ReplaceAll(escaped, `\`, `\\`)
+	escaped = strings.ReplaceAll(escaped, "*", `\*`)
+	escaped = strings.ReplaceAll(escaped, "_", `\_`)
+	escaped = strings.ReplaceAll(escaped, "`", `\`)
+	escaped = strings.ReplaceAll(escaped, "[", `\[`)
+	escaped = strings.ReplaceAll(escaped, "]", `\]`)
+	escaped = strings.ReplaceAll(escaped, "(", `\(`)
+	escaped = strings.ReplaceAll(escaped, ")", `\)`)
+	escaped = strings.ReplaceAll(escaped, ">", `\>`)
+	escaped = strings.ReplaceAll(escaped, "#", `\#`)
+	escaped = strings.ReplaceAll(escaped, "+", `\+`)
+	escaped = strings.ReplaceAll(escaped, "-", `\-`)
+	escaped = strings.ReplaceAll(escaped, "=", `\=`)
+	escaped = strings.ReplaceAll(escaped, "|", `\|`)
+	escaped = strings.ReplaceAll(escaped, ".", `\.`)
+	escaped = strings.ReplaceAll(escaped, "!", `\!`)
+	return escaped
 }
