@@ -103,10 +103,10 @@ func ValidateInitData(initData string) (int64, error) {
 		log.Printf("[AUTH] Data check string: %s", dataCheckString)
 	}
 
-	// Compute the secret key: HMAC_SHA256(bot_token, "WebAppData")
-	// In HMAC, the first parameter to New() is the key
-	secretKey := hmac.New(sha256.New, []byte(botToken))
-	secretKey.Write([]byte("WebAppData"))
+	// Compute the secret key: HMAC_SHA256(key="WebAppData", message=bot_token)
+	// The constant string "WebAppData" is used as the key
+	secretKey := hmac.New(sha256.New, []byte("WebAppData"))
+	secretKey.Write([]byte(botToken))
 	secret := secretKey.Sum(nil)
 	log.Printf("[AUTH] Secret key (hex): %s", hex.EncodeToString(secret)[:32]+"...")
 
