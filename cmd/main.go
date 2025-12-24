@@ -36,10 +36,24 @@ func main() {
 	// Start bot in a goroutine
 	go bot.StartBot()
 
+	// Initialize notification service for Telegram messages
+	notificationService, err := service.NewNotificationService()
+	if err != nil {
+		log.Printf("Warning: Failed to initialize notification service: %v", err)
+		// Continue without notifications - the bot can still function
+	} else {
+		log.Println("Notification service initialized")
+	}
+
 	// Start market worker for auto-locking expired markets
 	marketWorker := service.NewMarketWorker()
 	marketWorker.Start()
 	defer marketWorker.Stop()
+
+	// Wire up notification service to market worker (for auto-finalization)
+	if notificationService != nil {
+		marketWorker.SetNotificationService(notificationService)
+	}
 
 	// Set up HTTP server with auth middleware
 	mux := http.NewServeMux()
@@ -48,9 +62,11 @@ func main() {
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/ping", handlers.PingHandler)
 	apiMux.HandleFunc("/me", handlers.HandleMe)
+	apiMux.HandleFunc("/me/bets", handlers.HandleUserBets)
+	apiMux.HandleFunc("/me/stats", handlers.HandleUserStats)
 	apiMux.HandleFunc("/markets", handlers.HandleMarkets)
-	apiMux.HandleFunc("/markets/", handlers.HandleMarketResolve)   // Handles /markets/{id}/resolve
-	apiMux.HandleFunc("/markets/", handlers.HandleDispute)        // Handles /markets/{id}/dispute
+	apiMux.HandleFunc("/markets/", handlers.HandleMarketResolve)     // Handles /markets/{id}/resolve
+	apiMux.HandleFunc("/markets/", handlers.HandleDispute)           // Handles /markets/{id}/dispute
 	apiMux.HandleFunc("/admin/resolve", handlers.HandleAdminResolve) // Handles /api/admin/resolve
 	apiMux.HandleFunc("/bets", handlers.HandleBets)
 

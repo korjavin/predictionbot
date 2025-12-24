@@ -599,3 +599,173 @@ func GetMarketsPendingFinalization(threshold time.Duration) ([]int64, error) {
 
 	return marketIDs, nil
 }
+
+// BetStatus represents the status of a bet
+type BetStatus string
+
+const (
+	BetStatusPending  BetStatus = "PENDING"
+	BetStatusWon      BetStatus = "WON"
+	BetStatusLost     BetStatus = "LOST"
+	BetStatusRefunded BetStatus = "REFUNDED"
+)
+
+// BetHistoryItem represents a single bet in the user's history
+type BetHistoryItem struct {
+	MarketID      int64     `json:"market_id"`
+	Question      string    `json:"question"`
+	OutcomeChosen string    `json:"outcome_chosen"`
+	Amount        int64     `json:"amount"`
+	Status        BetStatus `json:"status"`
+	Payout        int64     `json:"payout,omitempty"`
+	PlacedAt      string    `json:"placed_at"`
+}
+
+// GetUserBets returns all bets for a user with computed status based on market outcome
+func GetUserBets(userID int64) ([]BetHistoryItem, error) {
+	rows, err := db.Query(`
+		SELECT b.id, b.market_id, m.question, b.outcome, b.amount, b.placed_at,
+		       m.status as market_status, m.outcome as market_outcome
+		FROM bets b
+		JOIN markets m ON b.market_id = m.id
+		WHERE b.user_id = ?
+		ORDER BY b.placed_at DESC
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user bets: %w", err)
+	}
+	defer rows.Close()
+
+	var bets []BetHistoryItem
+	for rows.Next() {
+		var b BetHistoryItem
+		var marketStatus, marketOutcome sql.NullString
+		var placedAt time.Time
+
+		err := rows.Scan(&b.MarketID, &b.MarketID, &b.Question, &b.OutcomeChosen, &b.Amount, &placedAt, &marketStatus, &marketOutcome)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan bet: %w", err)
+		}
+
+		b.PlacedAt = placedAt.Format("2006-01-02T15:04:05Z07:00")
+
+		// Determine bet status based on market status and outcome
+		b.Status = computeBetStatus(marketStatus.String, marketOutcome.String, b.OutcomeChosen)
+
+		// Calculate payout for won bets
+		if b.Status == BetStatusWon {
+			// Get the payout amount from transactions
+			var payout int64
+			err = db.QueryRow(`
+				SELECT amount
+				FROM transactions
+				WHERE user_id = ? AND source_type = 'WIN_PAYOUT'
+				AND description LIKE ?
+			`, userID, fmt.Sprintf("%%bet #%% on market #%d%%", b.MarketID)).Scan(&payout)
+			if err == nil && payout > 0 {
+				b.Payout = payout
+			}
+		}
+
+		bets = append(bets, b)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating bets: %w", err)
+	}
+
+	return bets, nil
+}
+
+// computeBetStatus determines the status of a bet based on market state
+func computeBetStatus(marketStatus, marketOutcome, betOutcome string) BetStatus {
+	// Active markets are pending
+	if marketStatus == string(MarketStatusActive) || marketStatus == string(MarketStatusLocked) {
+		return BetStatusPending
+	}
+
+	// Refunded if market was never resolved (edge case)
+	if marketStatus == "" && marketOutcome == "" {
+		return BetStatusRefunded
+	}
+
+	// Market is resolved/finalized
+	if marketOutcome == "" {
+		return BetStatusPending
+	}
+
+	// If bet outcome matches market outcome, it's a win
+	if betOutcome == marketOutcome {
+		return BetStatusWon
+	}
+
+	// Otherwise it's a loss
+	return BetStatusLost
+}
+
+// UserStats represents user statistics
+type UserStats struct {
+	TotalBets  int     `json:"total_bets"`
+	Wins       int     `json:"wins"`
+	Losses     int     `json:"losses"`
+	WinRate    float64 `json:"win_rate"`
+	TotalWager int64   `json:"total_wager"`
+	TotalWins  int64   `json:"total_wins"`
+}
+
+// GetUserStats returns statistics for a user
+func GetUserStats(userID int64) (*UserStats, error) {
+	stats := &UserStats{}
+
+	// Get total bets count
+	err := db.QueryRow(`
+		SELECT COUNT(*) FROM bets WHERE user_id = ?
+	`, userID).Scan(&stats.TotalBets)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total bets: %w", err)
+	}
+
+	// Get wins count
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM bets b
+		JOIN markets m ON b.market_id = m.id
+		WHERE b.user_id = ? AND m.status = 'FINALIZED' AND m.outcome = b.outcome
+	`, userID).Scan(&stats.Wins)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get wins count: %w", err)
+	}
+
+	// Get losses count
+	err = db.QueryRow(`
+		SELECT COUNT(*) FROM bets b
+		JOIN markets m ON b.market_id = m.id
+		WHERE b.user_id = ? AND m.status = 'FINALIZED' AND m.outcome != b.outcome AND m.outcome != ''
+	`, userID).Scan(&stats.Losses)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get losses count: %w", err)
+	}
+
+	// Get total wagered
+	err = db.QueryRow(`
+		SELECT COALESCE(SUM(amount), 0) FROM bets WHERE user_id = ?
+	`, userID).Scan(&stats.TotalWager)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total wager: %w", err)
+	}
+
+	// Get total winnings (net profit)
+	err = db.QueryRow(`
+		SELECT COALESCE(SUM(amount), 0) FROM transactions
+		WHERE user_id = ? AND source_type = 'WIN_PAYOUT'
+	`, userID).Scan(&stats.TotalWins)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get total wins: %w", err)
+	}
+
+	// Calculate win rate
+	if stats.TotalBets > 0 {
+		stats.WinRate = float64(stats.Wins) / float64(stats.TotalBets) * 100
+	}
+
+	return stats, nil
+}

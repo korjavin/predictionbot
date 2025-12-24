@@ -24,6 +24,7 @@ Task 8: Add Server-Side Debug Logs
 - Task 4: COMPLETED
 - Task 5: COMPLETED
 - Task 6: COMPLETED
+- Task 7: COMPLETED
 - Task 8: COMPLETED
 
 ## Done
@@ -33,10 +34,11 @@ Task 8: Add Server-Side Debug Logs
 - Task 4: Betting Engine & Parimutuel Logic
 - Task 5: Market Resolution & Payout Engine
 - Task 6: Dispute Mechanism & Admin Control
+- Task 7: User Profile, History & Push Notifications
 - Task 8: Add Server-Side Debug Logs
 
 ## Now
-- Task 7 (Bot Market Commands)
+- Task 9 (Integration Testing)
 
 ## Next
 - Testing & Polishing
@@ -45,16 +47,20 @@ Task 8: Add Server-Side Debug Logs
 - None
 
 ## Working set (files/ids/commands)
-- internal/service/market_worker.go (Background worker for auto-locking)
-- internal/service/payout.go (Market resolution and payout logic)
+- internal/service/notification.go (Telegram notification service)
+- internal/service/payout.go (Market resolution, payout, and notifications)
+- internal/service/market_worker.go (Background worker with notifications)
+- internal/handlers/history.go (User bets and stats endpoints)
 - internal/handlers/markets.go (Market endpoints including resolve)
-- internal/storage/sqlite.go (Database schema and migrations)
-- cmd/main.go (Application entry point)
+- internal/storage/sqlite.go (Database schema, GetUserBets, GetUserStats)
+- cmd/main.go (Application entry point with notification wiring)
 - internal/logger/logger.go (Shared logging package)
 - internal/bot/bot.go
 - internal/auth/auth.go
 - internal/handlers/me.go
 - internal/handlers/bets.go
+- web/app.js (Profile tab, history, stats)
+- web/index.html (Navigation tabs, profile UI)
 
 ## 2024-12-24 - Debug Logging Refactor (Task 8 - COMPLETED)
 - Created `internal/logger` package for centralized debug logging
@@ -125,6 +131,37 @@ Task 8: Add Server-Side Debug Logs
 - Integrated worker in cmd/main.go
   - Worker starts on app startup, stops on graceful shutdown
   - Registered /markets/{id}/resolve route
+
+## 2024-12-24 - User Profile, History & Push Notifications (Task 7 - COMPLETED)
+- Created notification service (internal/service/notification.go) for Telegram messages:
+  - SendWinNotification(): "🏆 Congratulations! You won X WSC on market '#ID Question'. New Balance: Y WSC"
+  - SendRefundNotification(): "💰 Refund received: X WSC has been returned for market '#ID Question'"
+  - SendLossNotification(): "📉 Market resolved: Your bet of X WSC on market '#ID Question' did not win"
+  - SendDisputeAlert(): Sends alert to admin when dispute is raised
+- Integrated notifications into payout.go:
+  - FinalizeMarket() sends win/loss/refund notifications after payout
+  - RaiseDispute() sends dispute alert to admin (ADMIN_TELEGRAM_ID env var)
+- Added betting history queries to sqlite.go:
+  - GetUserBets(userID): Returns bets with computed status (WON/LOST/PENDING/REFUNDED)
+  - GetUserStats(userID): Returns total_bets, wins, losses, win_rate, total_wager, total_wins
+  - computeBetStatus(): Determines bet status based on market state
+- Created API endpoints in internal/handlers/history.go:
+  - GET /api/me/bets: Returns array of BetHistoryItem
+  - GET /api/me/stats: Returns UserStats object
+- Updated frontend with Profile tab:
+  - Navigation tabs: Markets | Profile
+  - Profile header with avatar initial, name, username
+  - Balance display synced between tabs
+  - Stats grid: Total Bets, Wins, Win Rate (%), Total Profit
+  - Betting history with color-coded status badges:
+    - Green (WON): Shows payout amount
+    - Red (LOST): Shows loss amount
+    - Gray (PENDING): Shows bet amount
+    - Gray (REFUNDED): Shows refund notification
+- Environment variables:
+  - ADMIN_TELEGRAM_ID: Telegram user ID to receive dispute alerts
+  - TELEGRAM_BOT_TOKEN: Required for notification service
+
 
 ## 2024-12-24 - Bot Commands Implementation
 - Implemented Telegram bot commands in internal/bot/bot.go:

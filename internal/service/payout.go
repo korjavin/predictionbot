@@ -10,11 +10,18 @@ import (
 )
 
 // PayoutService handles market resolution and payouts
-type PayoutService struct{}
+type PayoutService struct {
+	notificationService *NotificationService
+}
 
 // NewPayoutService creates a new payout service
 func NewPayoutService() *PayoutService {
 	return &PayoutService{}
+}
+
+// SetNotificationService sets the notification service for sending Telegram messages
+func (s *PayoutService) SetNotificationService(ns *NotificationService) {
+	s.notificationService = ns
 }
 
 // ResolveMarket resolves a market (Creator Action)
@@ -77,11 +84,12 @@ func (s *PayoutService) RaiseDispute(ctx context.Context, marketID, userID int64
 
 	// Validate that the market exists and is in RESOLVED status
 	var currentStatus string
+	var question string
 	err := db.QueryRowContext(ctx, `
-		SELECT status
+		SELECT status, question
 		FROM markets
 		WHERE id = ?
-	`, marketID).Scan(&currentStatus)
+	`, marketID).Scan(&currentStatus, &question)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("market not found")
 	}
@@ -102,6 +110,11 @@ func (s *PayoutService) RaiseDispute(ctx context.Context, marketID, userID int64
 
 	logger.Debug(userID, "market_disputed", fmt.Sprintf("market_id=%d", marketID))
 
+	// Send dispute alert to admin
+	if s.notificationService != nil {
+		go s.notificationService.SendDisputeAlert(marketID, question, userID)
+	}
+
 	return nil
 }
 
@@ -118,11 +131,12 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 	// Get market details
 	var marketStatus string
 	var storedOutcome string
+	var question string
 	err := db.QueryRowContext(ctx, `
-		SELECT status, outcome
+		SELECT status, outcome, question
 		FROM markets
 		WHERE id = ?
-	`, marketID).Scan(&marketStatus, &storedOutcome)
+	`, marketID).Scan(&marketStatus, &storedOutcome, &question)
 	if err == sql.ErrNoRows {
 		return 0, fmt.Errorf("market not found")
 	}
@@ -192,6 +206,13 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 
 	logger.Debug(0, "market_finalization_started", fmt.Sprintf("market_id=%d outcome=%s total_pool=%d winning_pool=%d", marketID, outcome, totalPool, winningPool))
 
+	type payoutInfo struct {
+		userID int64
+		amount int64
+		isWin  bool
+	}
+
+	var payoutsToNotify []payoutInfo
 	payoutsProcessed := 0
 
 	// Edge case: Nobody bet on the winning outcome (WinningPool == 0)
@@ -220,6 +241,7 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 			}
 
 			payoutsProcessed++
+			payoutsToNotify = append(payoutsToNotify, payoutInfo{userID: b.UserID, amount: b.Amount, isWin: false})
 		}
 	} else {
 		// Calculate and distribute winnings using parimutuel formula
@@ -250,7 +272,11 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 				}
 
 				payoutsProcessed++
+				payoutsToNotify = append(payoutsToNotify, payoutInfo{userID: b.UserID, amount: payout, isWin: true})
 				logger.Debug(b.UserID, "payout_processed", fmt.Sprintf("bet_id=%d market_id=%d bet_amount=%d payout=%d profit=%d", b.ID, marketID, b.Amount, payout, netProfit))
+			} else {
+				// Loss - still track for notification
+				payoutsToNotify = append(payoutsToNotify, payoutInfo{userID: b.UserID, amount: b.Amount, isWin: false})
 			}
 		}
 	}
@@ -268,6 +294,28 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Send notifications after commit (outside transaction)
+	if s.notificationService != nil {
+		go func() {
+			for _, p := range payoutsToNotify {
+				user, err := storage.GetUserByID(p.userID)
+				if err != nil || user == nil {
+					continue
+				}
+
+				if p.isWin {
+					s.notificationService.SendWinNotification(p.userID, marketID, question, p.amount, user.Balance)
+				} else if winningPool == 0 {
+					// Refund case
+					s.notificationService.SendRefundNotification(p.userID, marketID, question, p.amount, user.Balance)
+				} else {
+					// Loss case
+					s.notificationService.SendLossNotification(p.userID, marketID, question, p.amount)
+				}
+			}
+		}()
 	}
 
 	logger.Debug(0, "market_finalization_completed", fmt.Sprintf("market_id=%d outcome=%s payouts=%d", marketID, outcome, payoutsProcessed))

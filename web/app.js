@@ -4,6 +4,9 @@ if (typeof window.Telegram !== 'undefined' && window.Telegram.WebApp) {
     window.Telegram.WebApp.expand();
 }
 
+// Current active tab
+let currentTab = 'markets';
+
 // Function to fetch user profile with auth
 async function fetchUserProfile() {
     const response = await fetch('/api/me', {
@@ -29,27 +32,183 @@ function formatDate(dateString) {
     });
 }
 
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
 // Display user profile data
 async function displayUserProfile() {
     const userNameEl = document.getElementById('user-name');
     const userBalanceEl = document.getElementById('user-balance');
     const loadingEl = document.querySelector('.loading');
-    const profileEl = document.getElementById('user-profile');
+    const mainContentEl = document.getElementById('main-content');
+    const profileNameEl = document.getElementById('profile-name');
+    const profileUsernameEl = document.getElementById('profile-username');
+    const profileBalanceEl = document.getElementById('profile-balance');
+    const profileAvatarEl = document.getElementById('profile-avatar');
     
     try {
         const user = await fetchUserProfile();
         loadingEl.style.display = 'none';
-        profileEl.style.display = 'block';
-        userNameEl.textContent = user.first_name;
-        userBalanceEl.textContent = formatBalance(user.balance);
+        mainContentEl.style.display = 'block';
         
-        // Load markets after user profile is loaded
-        renderMarkets();
+        // Update header name (if it exists)
+        if (userNameEl) {
+            userNameEl.textContent = user.first_name;
+        }
+        
+        // Update balance in header
+        userBalanceEl.textContent = formatBalance(user.balance) + ' WSC';
+        
+        // Update profile tab
+        profileNameEl.textContent = user.first_name;
+        profileBalanceEl.textContent = formatBalance(user.balance) + ' WSC';
+        
+        // Set avatar initial
+        const initial = user.first_name ? user.first_name.charAt(0).toUpperCase() : '?';
+        profileAvatarEl.textContent = initial;
+        
+        if (user.username) {
+            profileUsernameEl.textContent = '@' + user.username;
+        } else {
+            profileUsernameEl.textContent = '';
+        }
+        
+        // Load initial tab content
+        if (currentTab === 'markets') {
+            renderMarkets();
+        } else if (currentTab === 'profile') {
+            renderProfile();
+        }
+        
+        // Set up navigation tabs
+        setupNavigation();
     } catch (error) {
         console.error('Failed to load user profile:', error);
         loadingEl.style.display = 'none';
-        userNameEl.textContent = 'Guest';
-        userBalanceEl.textContent = '0.00';
+        if (userNameEl) {
+            userNameEl.textContent = 'Guest';
+        }
+        userBalanceEl.textContent = '0.00 WSC';
+    }
+}
+
+// Set up navigation tabs
+function setupNavigation() {
+    const tabs = document.querySelectorAll('.nav-tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            const tabName = tab.dataset.tab;
+            
+            // Update active tab
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            
+            // Show/hide content
+            document.getElementById('markets-tab').style.display = tabName === 'markets' ? 'block' : 'none';
+            document.getElementById('profile-tab').style.display = tabName === 'profile' ? 'block' : 'none';
+            
+            currentTab = tabName;
+            
+            // Load content for the tab
+            if (tabName === 'markets') {
+                renderMarkets();
+            } else if (tabName === 'profile') {
+                renderProfile();
+            }
+        });
+    });
+}
+
+// Render profile tab (stats and history)
+async function renderProfile() {
+    await Promise.all([
+        renderUserStats(),
+        renderBetHistory()
+    ]);
+}
+
+// Fetch and display user stats
+async function renderUserStats() {
+    try {
+        const response = await fetch('/api/me/stats', {
+            headers: { 'X-Telegram-Init-Data': window.Telegram.WebApp.initData }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch stats');
+        
+        const stats = await response.json();
+        
+        document.getElementById('stat-total-bets').textContent = stats.total_bets || 0;
+        document.getElementById('stat-wins').textContent = stats.wins || 0;
+        document.getElementById('stat-win-rate').textContent = (stats.win_rate || 0).toFixed(1) + '%';
+        document.getElementById('stat-profit').textContent = formatBalance((stats.total_wins - stats.total_wager) / 100);
+        
+    } catch (error) {
+        console.error('Failed to render stats:', error);
+        document.getElementById('stat-total-bets').textContent = '-';
+        document.getElementById('stat-wins').textContent = '-';
+        document.getElementById('stat-win-rate').textContent = '-';
+        document.getElementById('stat-profit').textContent = '-';
+    }
+}
+
+// Fetch and display bet history
+async function renderBetHistory() {
+    const historyListEl = document.getElementById('history-list');
+    
+    try {
+        const response = await fetch('/api/me/bets', {
+            headers: { 'X-Telegram-Init-Data': window.Telegram.WebApp.initData }
+        });
+        
+        if (!response.ok) throw new Error('Failed to fetch bet history');
+        
+        const bets = await response.json();
+        
+        if (bets.length === 0) {
+            historyListEl.innerHTML = '<div class="no-markets">No bets placed yet. Start predicting!</div>';
+            return;
+        }
+        
+        historyListEl.innerHTML = bets.map(bet => {
+            const statusClass = 'status-' + bet.status.toLowerCase();
+            const amountWSC = formatBalance(bet.amount);
+            const payoutWSC = bet.payout ? formatBalance(bet.payout) : null;
+            
+            let resultText = '';
+            if (bet.status === 'WON') {
+                resultText = `<span class="history-payout" style="color: #4ade80;">+${payoutWSC} WSC</span>`;
+            } else if (bet.status === 'REFUNDED') {
+                resultText = `<span class="history-payout" style="color: #aaaaaa;">Refunded</span>`;
+            } else if (bet.status === 'LOST') {
+                resultText = `<span class="history-payout" style="color: #ff6b6b;">-${amountWSC} WSC</span>`;
+            } else {
+                resultText = `<span class="history-payout" style="color: #aaaacc;">${amountWSC} WSC</span>`;
+            }
+            
+            return `
+                <div class="history-card">
+                    <div class="history-info">
+                        <div class="history-question">${escapeHtml(bet.question)}</div>
+                        <div class="history-meta">
+                            Bet ${bet.outcome_chosen} • ${formatDate(bet.placed_at)}
+                        </div>
+                        <span class="status-badge ${statusClass}">${bet.status}</span>
+                    </div>
+                    <div class="history-amount">
+                        ${resultText}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Failed to render bet history:', error);
+        historyListEl.innerHTML = '<div class="error-message">Failed to load bet history</div>';
     }
 }
 
@@ -69,7 +228,7 @@ async function renderMarkets() {
     
     try {
         const markets = await fetchMarkets();
-        marketFeedEl.classList.add('active');
+        marketFeedEl.classList.add('visible');
         
         if (markets.length === 0) {
             marketsListEl.innerHTML = '<div class="no-markets">No active markets yet. Create one!</div>';
@@ -169,7 +328,8 @@ async function handleBetClick(event) {
         messageEl.innerHTML = `<div class="success-message">Bet placed! New balance: ${formatBalance(result.new_balance)}</div>`;
         
         // Update balance display
-        document.getElementById('user-balance').textContent = formatBalance(result.new_balance);
+        document.getElementById('user-balance').textContent = formatBalance(result.new_balance) + ' WSC';
+        document.getElementById('profile-balance').textContent = formatBalance(result.new_balance) + ' WSC';
         
         // Refresh markets to show updated pools
         await renderMarkets();
@@ -184,13 +344,6 @@ async function handleBetClick(event) {
         // Refresh markets to restore correct pool amounts
         await renderMarkets();
     }
-}
-
-// Escape HTML to prevent XSS
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 // Place a bet on a market

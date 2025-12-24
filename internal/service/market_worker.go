@@ -16,10 +16,11 @@ const DefaultDisputeDelay = 24 * time.Hour
 
 // MarketWorker handles background tasks for markets
 type MarketWorker struct {
-	ctx          context.Context
-	cancel       context.CancelFunc
-	ticker       *time.Ticker
-	disputeDelay time.Duration
+	ctx                 context.Context
+	cancel              context.CancelFunc
+	ticker              *time.Ticker
+	disputeDelay        time.Duration
+	notificationService *NotificationService
 }
 
 // NewMarketWorker creates a new market worker
@@ -71,6 +72,11 @@ func (w *MarketWorker) Start() {
 func (w *MarketWorker) Stop() {
 	w.ticker.Stop()
 	w.cancel()
+}
+
+// SetNotificationService sets the notification service for payout notifications
+func (w *MarketWorker) SetNotificationService(ns *NotificationService) {
+	w.notificationService = ns
 }
 
 // lockExpiredMarkets finds and locks all expired active markets
@@ -126,6 +132,9 @@ func (w *MarketWorker) autoFinalizeResolvedMarkets() {
 	logger.Debug(0, "market_worker_auto_finalize", fmt.Sprintf("count=%d", len(marketIDs)))
 
 	payoutService := NewPayoutService()
+	if w.notificationService != nil {
+		payoutService.SetNotificationService(w.notificationService)
+	}
 
 	// Finalize each market
 	for _, marketID := range marketIDs {
