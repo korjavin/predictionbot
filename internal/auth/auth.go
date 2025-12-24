@@ -46,6 +46,9 @@ func ValidateInitData(initData string) (int64, error) {
 		key, value := kv[0], kv[1]
 		if key == "hash" {
 			hash = value
+		} else if key == "signature" {
+			// Signature should be excluded from hash calculation (like hash itself)
+			continue
 		} else {
 			data[key] = value
 		}
