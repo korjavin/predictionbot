@@ -28,9 +28,11 @@ const (
 // ValidateInitData validates the Telegram initData string
 // It checks the HMAC-SHA256 signature and the auth_date
 func ValidateInitData(initData string) (int64, error) {
-	// Debug: log raw initData (first 300 chars)
-	if len(initData) > 300 {
-		log.Printf("[AUTH] Raw initData (first 300 chars): %s...", initData[:300])
+	// Debug: log raw initData length and sample
+	log.Printf("[AUTH] Raw initData length: %d chars", len(initData))
+	if len(initData) > 400 {
+		log.Printf("[AUTH] Raw initData (first 200 chars): %s...", initData[:200])
+		log.Printf("[AUTH] Raw initData (last 200 chars): ...%s", initData[len(initData)-200:])
 	} else {
 		log.Printf("[AUTH] Raw initData: %s", initData)
 	}
@@ -63,6 +65,16 @@ func ValidateInitData(initData string) (int64, error) {
 
 	if hash == "" {
 		return 0, fmt.Errorf("hash not found in initData")
+	}
+
+	// Debug: log all parsed fields (except sensitive data)
+	log.Printf("[AUTH] Parsed fields: hash=%s..., %d other fields", hash[:16], len(data))
+	for k := range data {
+		if k != "user" {
+			log.Printf("[AUTH]   %s = %s", k, data[k])
+		} else {
+			log.Printf("[AUTH]   %s = (user data, %d chars)", k, len(data[k]))
+		}
 	}
 
 	// Get the bot token
