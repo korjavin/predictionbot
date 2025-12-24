@@ -9,21 +9,15 @@ import (
 	"predictionbot/internal/storage"
 )
 
-const testDBPath = "/tmp/test_market.db"
-
 func setupTestDB(t *testing.T) {
-	// Remove existing test database
-	os.Remove(testDBPath)
-
-	// Initialize test database
-	if err := storage.InitDB(testDBPath); err != nil {
+	// Use in-memory database for tests
+	if err := storage.InitDB(":memory:"); err != nil {
 		t.Fatalf("Failed to initialize test database: %v", err)
 	}
 }
 
 func cleanupTestDB(t *testing.T) {
 	storage.CloseDB()
-	os.Remove(testDBPath)
 }
 
 func TestResolveMarket(t *testing.T) {

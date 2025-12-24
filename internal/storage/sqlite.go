@@ -27,13 +27,16 @@ var db *sql.DB
 func InitDB(dbPath string) error {
 	var err error
 
-	// Ensure the directory exists
-	absPath, err := filepath.Abs(dbPath)
-	if err != nil {
-		return err
+	// For in-memory databases, use the path directly
+	// Otherwise ensure the directory exists
+	if dbPath != ":memory:" {
+		_, err = filepath.Abs(dbPath)
+		if err != nil {
+			return err
+		}
 	}
 
-	db, err = sql.Open("sqlite", absPath)
+	db, err = sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
 	}
@@ -351,11 +354,12 @@ func ListActiveMarkets() ([]Market, error) {
 	var markets []Market
 	for rows.Next() {
 		var market Market
+		var imageURL sql.NullString
 		err := rows.Scan(
 			&market.ID,
 			&market.CreatorID,
 			&market.Question,
-			&market.ImageURL,
+			&imageURL,
 			&market.Status,
 			&market.ExpiresAt,
 			&market.CreatedAt,
@@ -363,6 +367,11 @@ func ListActiveMarkets() ([]Market, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan market: %w", err)
 		}
+
+		if imageURL.Valid {
+			market.ImageURL = imageURL.String
+		}
+
 		markets = append(markets, market)
 	}
 
