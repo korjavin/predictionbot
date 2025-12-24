@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  predictionbot:
+    build: .
+    container_name: predictionbot
+    ports:
+      - "8080:8080"
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - WEB_APP_URL=${WEB_APP_URL:-http://localhost:8080}
+      - PORT=8080
+    volumes:
+      - ./web:/app/web:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
