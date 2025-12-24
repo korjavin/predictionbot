@@ -83,9 +83,13 @@ func ValidateInitData(initData string) (int64, error) {
 	}
 	dataCheckString := strings.Join(dataCheck, "\n")
 
-	// Compute the secret key: HMAC_SHA256(<bot_token>, "WebAppData")
-	secretKey := hmac.New(sha256.New, []byte("WebAppData"))
-	secretKey.Write([]byte(botToken))
+	// Debug: log the data check string
+	log.Printf("[AUTH] Data check string keys: %v", dataCheckKeys)
+
+	// Compute the secret key: HMAC_SHA256(bot_token, "WebAppData")
+	// In HMAC, the first parameter to New() is the key
+	secretKey := hmac.New(sha256.New, []byte(botToken))
+	secretKey.Write([]byte("WebAppData"))
 	secret := secretKey.Sum(nil)
 
 	// Compute the expected hash: HMAC_SHA256(<secret>, <data_check_string>)
@@ -95,7 +99,8 @@ func ValidateInitData(initData string) (int64, error) {
 
 	// Compare hashes
 	if hash != computedHash {
-		logger.Debug(0, "auth_invalid_hash", fmt.Sprintf("received_hash=%s", hash[:16]+"..."))
+		logger.Debug(0, "auth_invalid_hash", fmt.Sprintf("received_hash=%s computed_hash=%s", hash[:16]+"...", computedHash[:16]+"..."))
+		log.Printf("[AUTH] Hash mismatch - received: %s, computed: %s", hash, computedHash)
 		return 0, fmt.Errorf("invalid hash")
 	}
 
