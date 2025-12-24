@@ -31,22 +31,22 @@ func HandleMe(w http.ResponseWriter, r *http.Request) {
 
 	// Get user ID from context
 	ctx := r.Context()
-	userID, ok := auth.GetUserIDFromContext(ctx)
+	telegramID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		logger.Debug(0, "me_unauthorized", "path="+r.URL.Path)
 		http.Error(w, "Unauthorized: user not in context", http.StatusUnauthorized)
 		return
 	}
 
-	// Query user by internal ID
-	user, err := storage.GetUserByID(userID)
+	// Query user by Telegram ID
+	user, err := storage.GetUserByTelegramID(telegramID)
 	if err != nil {
-		logger.Debug(userID, "me_error", "error="+err.Error())
+		logger.Debug(telegramID, "me_error", "error="+err.Error())
 		http.Error(w, "Failed to get user", http.StatusInternalServerError)
 		return
 	}
 	if user == nil {
-		logger.Debug(userID, "me_not_found", "")
+		logger.Debug(telegramID, "me_not_found", "")
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
@@ -63,7 +63,7 @@ func HandleMe(w http.ResponseWriter, r *http.Request) {
 		BalanceDisplay: balanceDisplay,
 	}
 
-	logger.Debug(userID, "me_success", fmt.Sprintf("telegram_id=%d balance=%d", user.TelegramID, user.Balance))
+	logger.Debug(telegramID, "me_success", fmt.Sprintf("telegram_id=%d balance=%d", user.TelegramID, user.Balance))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
@@ -82,7 +82,7 @@ func HandleBailout(w http.ResponseWriter, r *http.Request) {
 
 	// Get user ID from context
 	ctx := r.Context()
-	userID, ok := auth.GetUserIDFromContext(ctx)
+	telegramID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		logger.Debug(0, "bailout_unauthorized", "path="+r.URL.Path)
 		http.Error(w, "Unauthorized: user not in context", http.StatusUnauthorized)
@@ -90,21 +90,21 @@ func HandleBailout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get user to check balance
-	user, err := storage.GetUserByID(userID)
+	user, err := storage.GetUserByTelegramID(telegramID)
 	if err != nil {
-		logger.Debug(userID, "bailout_error", "error="+err.Error())
+		logger.Debug(telegramID, "bailout_error", "error="+err.Error())
 		http.Error(w, "Failed to get user", http.StatusInternalServerError)
 		return
 	}
 	if user == nil {
-		logger.Debug(userID, "bailout_not_found", "")
+		logger.Debug(telegramID, "bailout_not_found", "")
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
 	// Check if user is eligible (balance < 100 cents = 1.00 WSC)
 	if user.Balance >= storage.BailoutBalanceThreshold {
-		logger.Debug(userID, "bailout_balance_too_high", fmt.Sprintf("balance=%d", user.Balance))
+		logger.Debug(telegramID, "bailout_balance_too_high", fmt.Sprintf("balance=%d", user.Balance))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(storage.BailoutError{
@@ -114,9 +114,9 @@ func HandleBailout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check cooldown (24 hours since last bailout)
-	lastBailout, hasBailout, err := storage.GetLastBailout(userID)
+	lastBailout, hasBailout, err := storage.GetLastBailout(user.ID)
 	if err != nil {
-		logger.Debug(userID, "bailout_check_error", "error="+err.Error())
+		logger.Debug(telegramID, "bailout_check_error", "error="+err.Error())
 		http.Error(w, "Failed to check bailout eligibility", http.StatusInternalServerError)
 		return
 	}
@@ -126,7 +126,7 @@ func HandleBailout(w http.ResponseWriter, r *http.Request) {
 			remainingTime := nextAvailable.Sub(time.Now())
 			hours := int(remainingTime.Hours())
 			minutes := int(remainingTime.Minutes()) % 60
-			logger.Debug(userID, "bailout_cooldown_active", fmt.Sprintf("next_available=%s", nextAvailable.Format(time.RFC3339)))
+			logger.Debug(telegramID, "bailout_cooldown_active", fmt.Sprintf("next_available=%s", nextAvailable.Format(time.RFC3339)))
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
 			json.NewEncoder(w).Encode(storage.BailoutError{
@@ -138,11 +138,11 @@ func HandleBailout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Execute bailout
-	newBalance, err := storage.ExecuteBailout(userID)
+	newBalance, err := storage.ExecuteBailout(user.ID)
 	if err != nil {
 		// Check for specific errors
 		if err.Error() == "balance_too_high: user has sufficient funds" {
-			logger.Debug(userID, "bailout_balance_too_high", "")
+			logger.Debug(telegramID, "bailout_balance_too_high", "")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(storage.BailoutError{
@@ -151,7 +151,7 @@ func HandleBailout(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err.Error() == "cooldown_active: last bailout was at " {
-			logger.Debug(userID, "bailout_cooldown_active", "")
+			logger.Debug(telegramID, "bailout_cooldown_active", "")
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
 			json.NewEncoder(w).Encode(storage.BailoutError{
@@ -159,12 +159,12 @@ func HandleBailout(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		logger.Debug(userID, "bailout_execute_error", "error="+err.Error())
+		logger.Debug(telegramID, "bailout_execute_error", "error="+err.Error())
 		http.Error(w, "Failed to execute bailout", http.StatusInternalServerError)
 		return
 	}
 
-	logger.Debug(userID, "bailout_success", fmt.Sprintf("new_balance=%d", newBalance))
+	logger.Debug(telegramID, "bailout_success", fmt.Sprintf("new_balance=%d", newBalance))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(storage.BailoutResult{
