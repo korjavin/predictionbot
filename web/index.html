@@ -389,6 +389,66 @@
             background-color: rgba(255, 255, 255, 0.1);
             color: #aaaaaa;
         }
+        /* Leaderboard */
+        #leaderboard-feed {
+            display: none;
+        }
+        #leaderboard-feed.visible {
+            display: block;
+        }
+        .leaderboard-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .leaderboard-card {
+            background-color: var(--tg-theme-secondary-bg-color, #16213e);
+            padding: 16px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .leaderboard-card.is-me {
+            border: 2px solid var(--tg-theme-button-color, #4ade80);
+            background-color: rgba(74, 222, 128, 0.1);
+        }
+        .leaderboard-rank {
+            font-size: 20px;
+            font-weight: bold;
+            width: 40px;
+            text-align: center;
+        }
+        .leaderboard-rank.gold {
+            color: #ffd700;
+        }
+        .leaderboard-rank.silver {
+            color: #c0c0c0;
+        }
+        .leaderboard-rank.bronze {
+            color: #cd7f32;
+        }
+        .leaderboard-info {
+            flex: 1;
+            margin-left: 12px;
+        }
+        .leaderboard-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        .leaderboard-username {
+            font-size: 12px;
+            color: var(--tg-theme-hint-color, #888888);
+        }
+        .leaderboard-balance {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--tg-theme-button-color, #4ade80);
+        }
+        .leaderboard-badge {
+            font-size: 24px;
+        }
     </style>
 </head>
 <body>
@@ -399,6 +459,7 @@
             <!-- Navigation Tabs -->
             <div class="nav-tabs">
                 <button class="nav-tab active" data-tab="markets">Markets</button>
+                <button class="nav-tab" data-tab="leaders">Leaders 🏆</button>
                 <button class="nav-tab" data-tab="profile">Profile</button>
             </div>
             
@@ -471,6 +532,14 @@
                 <h2 class="section-title">My Betting History</h2>
                 <div id="history-feed">
                     <div id="history-list"></div>
+                </div>
+            </div>
+            
+            <!-- Leaderboard Tab -->
+            <div id="leaders-tab" style="display: none;">
+                <h2 class="section-title">🏆 Top Predictors</h2>
+                <div id="leaderboard-feed">
+                    <div id="leaderboard-list"></div>
                 </div>
             </div>
         </div>

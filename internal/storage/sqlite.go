@@ -113,6 +113,7 @@ func runMigrations() error {
 		CREATE INDEX IF NOT EXISTS idx_markets_created_at ON markets(created_at);
 		CREATE INDEX IF NOT EXISTS idx_bets_user_market ON bets(user_id, market_id);
 		CREATE INDEX IF NOT EXISTS idx_bets_market ON bets(market_id);
+		CREATE INDEX IF NOT EXISTS idx_users_balance ON users(balance DESC);
 	`
 
 	_, err := db.Exec(usersTable)
@@ -768,4 +769,48 @@ func GetUserStats(userID int64) (*UserStats, error) {
 	}
 
 	return stats, nil
+}
+
+    // GetTopUsers returns the top users by balance for the leaderboard
+func GetTopUsers(limit int) ([]LeaderboardEntry, error) {
+	// Use ROW_NUMBER() for proper ranking
+	rows, err := db.Query(`
+		SELECT 
+			ROW_NUMBER() OVER (ORDER BY balance DESC) as rank,
+			username,
+			first_name,
+			balance
+		FROM users
+		ORDER BY balance DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query leaderboard: %w", err)
+	}
+	defer rows.Close()
+
+	var leaderboard []LeaderboardEntry
+	for rows.Next() {
+		var entry LeaderboardEntry
+		var username sql.NullString
+		err := rows.Scan(&entry.Rank, &username, &entry.Name, &entry.Balance)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan leaderboard entry: %w", err)
+		}
+
+		if username.Valid {
+			entry.Username = username.String
+		} else {
+			entry.Username = ""
+		}
+		entry.BalanceDisplay = fmt.Sprintf("%.2f", float64(entry.Balance)/100)
+
+		leaderboard = append(leaderboard, entry)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating leaderboard: %w", err)
+	}
+
+	return leaderboard, nil
 }

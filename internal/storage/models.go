@@ -76,3 +76,12 @@ type Bet struct {
 	Amount   int64     `json:"amount" db:"amount"` // in cents
 	PlacedAt time.Time `json:"placed_at" db:"placed_at"`
 }
+
+// LeaderboardEntry represents a user entry in the leaderboard
+type LeaderboardEntry struct {
+	Rank           int64  `json:"rank"`
+	Name           string `json:"name"`
+	Username       string `json:"username"`
+	Balance        int64  `json:"balance"`
+	BalanceDisplay string `json:"balance_display"`
+}

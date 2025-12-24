@@ -3,20 +3,23 @@
 # Continuity Ledger
 
 ## Goal (incl. success criteria)
-Task 8: Add Server-Side Debug Logs
-- Add debug logging to track user interactions across the application
-- Log format: [DEBUG] timestamp=... user_id=... action=... details=...
-- Logs added to: bot.go (bot commands), handlers/* (API endpoints), auth.go (auth events)
+Task 8: Leaderboard & Competition
+- Add Global Leaderboard showing top users ranked by balance
+- Database index on balance column for performance
+- API endpoint: GET /api/leaderboard returns top 20 users
+- Frontend: Leaders tab with medal icons (🥇🥈🥉) and user highlight
 
 ## Constraints/Assumptions
-- Debug logs should include: user_id, action, timestamp, relevant details
-- Logs must not expose sensitive information (credentials, full user data)
-- Log level: DEBUG (can be filtered in production)
+- Leaderboard is public (no auth required for viewing)
+- Balances formatted as "500.00" (divide by 100)
+- Privacy: Only public info returned (name, username, balance)
+- Performance: Index ensures fast queries with many users
 
 ## Key decisions
-- Fixed newline escaping issue in `internal/bot/bot.go` for Markdown formatting
-- Consistent log format across all modules for easy parsing
-- Using standard `log` package with structured fields
+- Used ROW_NUMBER() for proper ranking in SQL
+- Three navigation tabs: Markets | Leaders | Profile
+- Medal icons for top 3 positions
+- Distinct background for current user in list
 
 ## State
 - Task 2: COMPLETED
@@ -25,7 +28,7 @@ Task 8: Add Server-Side Debug Logs
 - Task 5: COMPLETED
 - Task 6: COMPLETED
 - Task 7: COMPLETED
-- Task 8: COMPLETED
+- Task 8: COMPLETED (Leaderboard)
 
 ## Done
 - Task 1: User auto-registration with auth
@@ -35,7 +38,7 @@ Task 8: Add Server-Side Debug Logs
 - Task 5: Market Resolution & Payout Engine
 - Task 6: Dispute Mechanism & Admin Control
 - Task 7: User Profile, History & Push Notifications
-- Task 8: Add Server-Side Debug Logs
+- Task 8: Leaderboard & Competition
 
 ## Now
 - Task 9 (Integration Testing)
@@ -47,27 +50,33 @@ Task 8: Add Server-Side Debug Logs
 - None
 
 ## Working set (files/ids/commands)
-- internal/service/notification.go (Telegram notification service)
-- internal/service/payout.go (Market resolution, payout, and notifications)
-- internal/service/market_worker.go (Background worker with notifications)
-- internal/handlers/history.go (User bets and stats endpoints)
-- internal/handlers/markets.go (Market endpoints including resolve)
-- internal/storage/sqlite.go (Database schema, GetUserBets, GetUserStats)
-- cmd/main.go (Application entry point with notification wiring)
-- internal/logger/logger.go (Shared logging package)
-- internal/bot/bot.go
-- internal/auth/auth.go
-- internal/handlers/me.go
-- internal/handlers/bets.go
-- web/app.js (Profile tab, history, stats)
-- web/index.html (Navigation tabs, profile UI)
+- internal/handlers/leaderboard.go (NEW - Leaderboard API endpoint)
+- internal/storage/sqlite.go (GetTopUsers, balance index)
+- internal/storage/models.go (LeaderboardEntry model)
+- web/app.js (renderLeaderboard, fetchLeaderboard)
+- web/index.html (Leaders tab UI)
 
-## 2024-12-24 - Debug Logging Refactor (Task 8 - COMPLETED)
+## 2024-12-24 - Leaderboard & Competition (Task 8 - COMPLETED)
+- Added database index: `idx_users_balance ON users(balance DESC)`
+- Created `LeaderboardEntry` model with rank, name, username, balance, balance_display
+- Implemented `GetTopUsers(limit)` with ROW_NUMBER() for proper ranking
+- Created GET /api/leaderboard endpoint (HandleLeaderboard)
+- Registered route in cmd/main.go
+- Added Leaders tab to navigation (Markets | Leaders | Profile)
+- Added leaderboard CSS styles:
+  - Medal icons for ranks 1-3 (🥇🥈🥉)
+  - Gold/silver/bronze rank styling
+  - Distinct background for current user ("is-me" class)
+- Added JavaScript functions:
+  - `fetchLeaderboard()` - calls /api/leaderboard
+  - `renderLeaderboard()` - renders leaderboard with medals and user highlight
+- Updated navigation to show/hide leaders tab content
+
+## 2024-12-24 - Debug Logging Refactor (Task 8 - PREVIOUS)
 - Created `internal/logger` package for centralized debug logging
 - Refactored `auth`, `bot`, and `handlers` packages to use `logger.Debug`
 - Ensured consistent log format: `[DEBUG] timestamp=... user_id=... action=... details=...`
 - Removed direct `log.Printf` calls and repetitive timestamp formatting
-
 
 ## 2024-12-24 - Dispute Mechanism & Admin Control (Task 6 - COMPLETED)
 - Added `MarketStatusResolved` and `MarketStatusDisputed` status constants
@@ -84,8 +93,7 @@ Task 8: Add Server-Side Debug Logs
 - State Machine: ACTIVE → LOCKED → RESOLVED → (DISPUTED) → FINALIZED
 - Added 8 comprehensive tests in payout_test.go
 
-
-## 2024-12-24 - Debug Logging Implementation (Task 8)
+## 2024-12-24 - Debug Logging Implementation (Task 8 - PREVIOUS)
 - Added server-side debug logs to track user interactions
 - Log format: [DEBUG] timestamp=... user_id=... action=... details=...
 - Logs added to:
@@ -161,7 +169,6 @@ Task 8: Add Server-Side Debug Logs
 - Environment variables:
   - ADMIN_TELEGRAM_ID: Telegram user ID to receive dispute alerts
   - TELEGRAM_BOT_TOKEN: Required for notification service
-
 
 ## 2024-12-24 - Bot Commands Implementation
 - Implemented Telegram bot commands in internal/bot/bot.go:

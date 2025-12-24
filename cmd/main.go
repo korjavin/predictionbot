@@ -64,6 +64,7 @@ func main() {
 	apiMux.HandleFunc("/me", handlers.HandleMe)
 	apiMux.HandleFunc("/me/bets", handlers.HandleUserBets)
 	apiMux.HandleFunc("/me/stats", handlers.HandleUserStats)
+	apiMux.HandleFunc("/leaderboard", handlers.HandleLeaderboard)
 	apiMux.HandleFunc("/markets", handlers.HandleMarkets)
 	apiMux.HandleFunc("/markets/", handlers.HandleMarketResolve)     // Handles /markets/{id}/resolve
 	apiMux.HandleFunc("/markets/", handlers.HandleDispute)           // Handles /markets/{id}/dispute

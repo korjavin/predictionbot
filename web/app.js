@@ -6,6 +6,8 @@ if (typeof window.Telegram !== 'undefined' && window.Telegram.WebApp) {
 
 // Current active tab
 let currentTab = 'markets';
+// Current user for leaderboard comparison
+let currentUser = null;
 
 // Function to fetch user profile with auth
 async function fetchUserProfile() {
@@ -55,6 +57,9 @@ async function displayUserProfile() {
         loadingEl.style.display = 'none';
         mainContentEl.style.display = 'block';
         
+        // Store current user for leaderboard comparison
+        currentUser = user;
+        
         // Update header name (if it exists)
         if (userNameEl) {
             userNameEl.textContent = user.first_name;
@@ -80,6 +85,8 @@ async function displayUserProfile() {
         // Load initial tab content
         if (currentTab === 'markets') {
             renderMarkets();
+        } else if (currentTab === 'leaders') {
+            renderLeaderboard();
         } else if (currentTab === 'profile') {
             renderProfile();
         }
@@ -109,6 +116,7 @@ function setupNavigation() {
             
             // Show/hide content
             document.getElementById('markets-tab').style.display = tabName === 'markets' ? 'block' : 'none';
+            document.getElementById('leaders-tab').style.display = tabName === 'leaders' ? 'block' : 'none';
             document.getElementById('profile-tab').style.display = tabName === 'profile' ? 'block' : 'none';
             
             currentTab = tabName;
@@ -116,6 +124,8 @@ function setupNavigation() {
             // Load content for the tab
             if (tabName === 'markets') {
                 renderMarkets();
+            } else if (tabName === 'leaders') {
+                renderLeaderboard();
             } else if (tabName === 'profile') {
                 renderProfile();
             }
@@ -466,6 +476,75 @@ function clearForm() {
     document.getElementById('market-question').value = '';
     document.getElementById('market-deadline').value = '';
     document.getElementById('form-message').innerHTML = '';
+}
+
+// Fetch leaderboard from API
+async function fetchLeaderboard() {
+    const response = await fetch('/api/leaderboard', {
+        headers: { 'X-Telegram-Init-Data': window.Telegram.WebApp.initData }
+    });
+    if (!response.ok) throw new Error('Failed to fetch leaderboard');
+    return response.json();
+}
+
+// Render leaderboard to the DOM
+async function renderLeaderboard() {
+    const leaderboardListEl = document.getElementById('leaderboard-list');
+    const leaderboardFeedEl = document.getElementById('leaderboard-feed');
+    
+    try {
+        const leaderboard = await fetchLeaderboard();
+        leaderboardFeedEl.classList.add('visible');
+        
+        if (leaderboard.length === 0) {
+            leaderboardListEl.innerHTML = '<div class="no-markets">No leaders yet. Be the first!</div>';
+            return;
+        }
+        
+        leaderboardListEl.innerHTML = leaderboard.map(entry => {
+            const isMe = currentUser && entry.name === currentUser.first_name;
+            
+            // Get medal or rank
+            let rankDisplay = '';
+            let rankClass = '';
+            let badge = '';
+            
+            if (entry.rank === 1) {
+                rankDisplay = '🥇';
+                rankClass = 'gold';
+                badge = '<span class="leaderboard-badge">🥇</span>';
+            } else if (entry.rank === 2) {
+                rankDisplay = '2';
+                rankClass = 'silver';
+                badge = '<span class="leaderboard-badge">🥈</span>';
+            } else if (entry.rank === 3) {
+                rankDisplay = '3';
+                rankClass = 'bronze';
+                badge = '<span class="leaderboard-badge">🥉</span>';
+            } else {
+                rankDisplay = entry.rank;
+            }
+            
+            const name = escapeHtml(entry.name);
+            const username = entry.username ? '@' + escapeHtml(entry.username) : '';
+            
+            return `
+                <div class="leaderboard-card ${isMe ? 'is-me' : ''}">
+                    <div class="leaderboard-rank ${rankClass}">${rankDisplay}</div>
+                    ${badge}
+                    <div class="leaderboard-info">
+                        <div class="leaderboard-name">${name}${isMe ? ' (You)' : ''}</div>
+                        <div class="leaderboard-username">${username}</div>
+                    </div>
+                    <div class="leaderboard-balance">${entry.balance_display} WSC</div>
+                </div>
+            `;
+        }).join('');
+        
+    } catch (error) {
+        console.error('Failed to render leaderboard:', error);
+        leaderboardListEl.innerHTML = '<div class="error-message">Failed to load leaderboard</div>';
+    }
 }
 
 // Run on page load
