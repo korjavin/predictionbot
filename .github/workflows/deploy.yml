@@ -28,43 +28,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=sha,prefix=
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
-      - name: Update docker-compose.yml with new image tag
+      - name: Update and commit docker-compose.yml to deploy branch
         run: |
-          sed -i "s|image:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}|g" docker-compose.yml
-          cat docker-compose.yml
-
-      - name: Commit updated docker-compose.yml to deploy branch
-        run: |
-          git config --global user.name "GitHub Actions"
-          git config --global user.email "actions@github.com"
-          git fetch origin deploy || git checkout -b deploy
-          git checkout deploy || git checkout -b deploy
-          git merge --strategy-option=theirs -X theirs origin/master --allow-unrelated-histories || true
-          cp docker-compose.yml docker-compose.yml.tmp
-          git checkout master
-          git checkout deploy
-          cp docker-compose.yml.tmp docker-compose.yml
-          rm docker-compose.yml.tmp
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git checkout -B deploy
+          sed -i "s|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}|g" docker-compose.yml
           git add docker-compose.yml
-          git diff --cached --quiet || git commit -m "Update image tag to ${{ github.sha }}"
-          git push origin deploy
+          git commit -m "ci: Update image tag to ${{ github.sha }}"
+          git push origin deploy --force
 
       - name: Trigger Portainer webhook
         run: |

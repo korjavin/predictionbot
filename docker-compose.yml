@@ -2,6 +2,7 @@ version: '3.8'
 
 services:
   predictionbot:
+    # The image tag will be replaced by GitHub Actions workflow in the deploy branch
     image: ghcr.io/korjavin/predictionbot:latest
     container_name: predictionbot
     networks:
