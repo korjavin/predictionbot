@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"predictionbot/internal/auth"
+	"predictionbot/internal/logger"
 	"predictionbot/internal/storage"
 )
 
@@ -22,6 +23,7 @@ type UserResponse struct {
 // HandleMe handles the GET /api/me endpoint
 func HandleMe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
+		logger.Debug(0, "me_invalid_method", "method="+r.Method)
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -30,6 +32,7 @@ func HandleMe(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
+		logger.Debug(0, "me_unauthorized", "path="+r.URL.Path)
 		http.Error(w, "Unauthorized: user not in context", http.StatusUnauthorized)
 		return
 	}
@@ -37,10 +40,12 @@ func HandleMe(w http.ResponseWriter, r *http.Request) {
 	// Query user by internal ID
 	user, err := storage.GetUserByID(userID)
 	if err != nil {
+		logger.Debug(userID, "me_error", "error="+err.Error())
 		http.Error(w, "Failed to get user", http.StatusInternalServerError)
 		return
 	}
 	if user == nil {
+		logger.Debug(userID, "me_not_found", "")
 		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
@@ -57,6 +62,7 @@ func HandleMe(w http.ResponseWriter, r *http.Request) {
 		BalanceDisplay: balanceDisplay,
 	}
 
+	logger.Debug(userID, "me_success", fmt.Sprintf("telegram_id=%d balance=%d", user.TelegramID, user.Balance))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)

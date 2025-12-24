@@ -3,53 +3,69 @@
 # Continuity Ledger
 
 ## Goal (incl. success criteria)
-Complete Task 4: Betting Engine & Parimutuel Logic
-- Bets table schema with user_id, market_id, outcome, amount
-- PlaceBet() atomic transaction with ACID compliance
-- Pool statistics (pool_yes, pool_no) calculation
-- POST /api/bets endpoint with validation
-- Frontend betting UI with YES/NO buttons and odds display
+Task 8: Add Server-Side Debug Logs
+- Add debug logging to track user interactions across the application
+- Log format: [DEBUG] timestamp=... user_id=... action=... details=...
+- Logs added to: bot.go (bot commands), handlers/* (API endpoints), auth.go (auth events)
 
 ## Constraints/Assumptions
-- Use pure Go SQLite driver (modernc.org/sqlite)
-- Bet amount validation: positive integer, cannot exceed balance
-- Outcome restricted to "YES" or "NO" (CHECK constraint)
-- Transaction isolation: SERIALIZABLE for financial integrity
-- Parimutuel pools: implied odds calculated from pool totals
-- Market must be ACTIVE and not expired to accept bets
+- Debug logs should include: user_id, action, timestamp, relevant details
+- Logs must not expose sensitive information (credentials, full user data)
+- Log level: DEBUG (can be filtered in production)
 
 ## Key decisions
-- Pool totals stored as separate columns (pool_yes, pool_no) for efficiency
-- Bet placement returns updated pool totals for immediate UI refresh
-- Atomic transaction prevents double-spending on concurrent bets
+- Fixed newline escaping issue in `internal/bot/bot.go` for Markdown formatting
+- Consistent log format across all modules for easy parsing
+- Using standard `log` package with structured fields
 
 ## State
 - Task 2: COMPLETED
 - Task 3: COMPLETED
 - Task 4: COMPLETED
+- Task 8: COMPLETED
 
 ## Done
 - Task 1: User auto-registration with auth
 - Task 2: SQLite persistence & user economy
 - Task 3: Market Creation & Listing
 - Task 4: Betting Engine & Parimutuel Logic
+- Task 8: Add Server-Side Debug Logs
 
 ## Now
-- Task 4 implementation complete, awaiting user feedback
+- Task 5 (Market Resolution)
+- Task 6 (Admin Controls)
+- Task 7 (Bot Market Commands)
 
 ## Next
-- Task 5 (Market Resolution)
+- Testing & Polishing
 
 ## Open questions
 - None
 
 ## Working set (files/ids/commands)
-- internal/storage/models.go (Bet struct, Outcome type)
-- internal/storage/sqlite.go (bets table, PlaceBet(), GetPoolTotals(), GetMarketWithPools())
-- internal/handlers/bets.go (POST /api/bets handler)
-- cmd/main.go (route registration)
-- web/index.html (betting UI controls)
-- web/app.js (placeBet function, renderMarkets with odds, handleBetClick)
+- internal/logger/logger.go (New shared logging package)
+- internal/bot/bot.go
+- internal/auth/auth.go
+- internal/handlers/me.go
+- internal/handlers/markets.go
+- internal/handlers/bets.go
+
+## 2024-12-24 - Debug Logging Refactor (Task 8 - COMPLETED)
+- Created `internal/logger` package for centralized debug logging
+- Refactored `auth`, `bot`, and `handlers` packages to use `logger.Debug`
+- Ensured consistent log format: `[DEBUG] timestamp=... user_id=... action=... details=...`
+- Removed direct `log.Printf` calls and repetitive timestamp formatting
+
+
+## 2024-12-24 - Debug Logging Implementation (Task 8)
+- Added server-side debug logs to track user interactions
+- Log format: [DEBUG] timestamp=... user_id=... action=... details=...
+- Logs added to:
+  - internal/bot/bot.go: Bot command interactions (/start, /help, /balance, /me)
+  - internal/auth/auth.go: Authentication events (validation, user creation)
+  - internal/handlers/me.go: API endpoint calls
+  - internal/handlers/markets.go: Market creation and listing
+  - internal/handlers/bets.go: Bet placements and pool interactions
 
 ## 2024-12-24 - Betting Engine Implementation (Task 4 - POLISHED)
 - Added Bet struct with ID, UserID, MarketID, Outcome, Amount, PlacedAt

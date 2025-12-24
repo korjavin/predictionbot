@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"predictionbot/internal/logger"
 	"predictionbot/internal/storage"
 )
 
@@ -73,6 +74,7 @@ func ValidateInitData(initData string) (int64, error) {
 
 	// Compare hashes
 	if hash != computedHash {
+		logger.Debug(0, "auth_invalid_hash", fmt.Sprintf("received_hash=%s", hash[:16]+"..."))
 		return 0, fmt.Errorf("invalid hash")
 	}
 
@@ -91,6 +93,7 @@ func ValidateInitData(initData string) (int64, error) {
 	maxAge := int64(24 * 60 * 60) // 24 hours in seconds
 
 	if now-authDate > maxAge {
+		logger.Debug(0, "auth_expired", fmt.Sprintf("auth_date=%d now=%d", authDate, now))
 		return 0, fmt.Errorf("auth_date is too old")
 	}
 
@@ -107,6 +110,7 @@ func ValidateInitData(initData string) (int64, error) {
 		return 0, fmt.Errorf("failed to parse user: %w", err)
 	}
 
+	logger.Debug(userID, "auth_validated", fmt.Sprintf("auth_date=%d", authDate))
 	return userID, nil
 }
 
@@ -194,6 +198,7 @@ func GetOrCreateUser(telegramID int64, username, firstName string) (*storage.Use
 	}
 
 	if user != nil {
+		logger.Debug(telegramID, "user_found", fmt.Sprintf("user_id=%d", user.ID))
 		return user, nil
 	}
 
@@ -203,6 +208,7 @@ func GetOrCreateUser(telegramID int64, username, firstName string) (*storage.Use
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
+	logger.Debug(telegramID, "user_created", fmt.Sprintf("user_id=%d welcome_bonus=1000", user.ID))
 	log.Printf("Created new user %d with welcome bonus", telegramID)
 	return user, nil
 }
@@ -224,6 +230,7 @@ func Middleware(next http.Handler) http.Handler {
 
 		initData := r.Header.Get("X-Telegram-Init-Data")
 		if initData == "" {
+			logger.Debug(0, "auth_missing_header", fmt.Sprintf("path=%s", r.URL.Path))
 			http.Error(w, "Unauthorized: missing X-Telegram-Init-Data header", http.StatusUnauthorized)
 			return
 		}
@@ -240,6 +247,7 @@ func Middleware(next http.Handler) http.Handler {
 		}
 
 		if userStr == "" {
+			logger.Debug(0, "auth_missing_user", fmt.Sprintf("path=%s", r.URL.Path))
 			http.Error(w, "Unauthorized: user data not found", http.StatusUnauthorized)
 			return
 		}
@@ -247,6 +255,7 @@ func Middleware(next http.Handler) http.Handler {
 		// Extract user info
 		username, firstName, err := extractUserInfo(userStr)
 		if err != nil {
+			logger.Debug(0, "auth_extract_failed", fmt.Sprintf("path=%s error=%v", r.URL.Path, err))
 			log.Printf("Failed to extract user info: %v", err)
 			http.Error(w, "Unauthorized: invalid user data", http.StatusUnauthorized)
 			return
@@ -254,14 +263,18 @@ func Middleware(next http.Handler) http.Handler {
 
 		userID, err := ValidateInitData(initData)
 		if err != nil {
+			logger.Debug(0, "auth_validation_failed", fmt.Sprintf("path=%s error=%v", r.URL.Path, err))
 			log.Printf("Auth failed: %v", err)
 			http.Error(w, "Unauthorized: invalid initData", http.StatusUnauthorized)
 			return
 		}
 
+		logger.Debug(userID, "auth_middleware_success", fmt.Sprintf("path=%s", r.URL.Path))
+
 		// Get or create user (auto-registration with welcome bonus)
 		_, err = GetOrCreateUser(userID, username, firstName)
 		if err != nil {
+			logger.Debug(userID, "auth_user_failed", fmt.Sprintf("error=%v", err))
 			log.Printf("Failed to get/create user: %v", err)
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			return
