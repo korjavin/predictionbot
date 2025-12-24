@@ -56,10 +56,8 @@ func ValidateInitData(initData string) (int64, error) {
 
 		if key == "hash" {
 			hash = value
-		} else if key == "signature" {
-			// Signature should be excluded from hash calculation (like hash itself)
-			continue
 		} else {
+			// Include ALL fields except hash in the data check string
 			data[key] = value
 		}
 	}
