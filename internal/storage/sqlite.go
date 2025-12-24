@@ -25,7 +25,7 @@ func InitDB(dbPath string) error {
 		return err
 	}
 
-	db, err = sql.Open("sqlite3", absPath)
+	db, err = sql.Open("sqlite", absPath)
 	if err != nil {
 		return err
 	}
