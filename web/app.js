@@ -349,7 +349,7 @@ async function renderMarkets() {
 // Handle YES/NO bet button clicks
 async function handleBetClick(event) {
     const btn = event.currentTarget;
-    const marketId = btn.dataset.market;
+    const marketId = parseInt(btn.dataset.market, 10);
     const outcome = btn.dataset.outcome;
     const amountInput = document.getElementById(`bet-amount-${marketId}`);
     const messageEl = document.getElementById(`bet-message-${marketId}`);
