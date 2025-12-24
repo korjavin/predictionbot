@@ -83,8 +83,15 @@ func ValidateInitData(initData string) (int64, error) {
 	}
 	dataCheckString := strings.Join(dataCheck, "\n")
 
-	// Debug: log the data check string
+	// Debug: log the data check string (truncated for security)
 	log.Printf("[AUTH] Data check string keys: %v", dataCheckKeys)
+	log.Printf("[AUTH] Data check string length: %d chars", len(dataCheckString))
+	// Log first 200 chars of data check string for debugging
+	if len(dataCheckString) > 200 {
+		log.Printf("[AUTH] Data check string (first 200 chars): %s...", dataCheckString[:200])
+	} else {
+		log.Printf("[AUTH] Data check string: %s", dataCheckString)
+	}
 
 	// Compute the secret key: HMAC_SHA256(bot_token, "WebAppData")
 	// In HMAC, the first parameter to New() is the key
