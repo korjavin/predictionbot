@@ -11,14 +11,14 @@ import (
 )
 
 const (
-	// WelcomeBonusAmount is the welcome bonus amount in cents (1000 WSC = 100000 cents)
-	WelcomeBonusAmount int64 = 100000
-	// BailoutAmount is the bailout amount in cents (500 WSC = 50000 cents)
-	BailoutAmount int64 = 50000
+	// WelcomeBonusAmount is the welcome bonus amount
+	WelcomeBonusAmount int64 = 1000
+	// BailoutAmount is the bailout amount
+	BailoutAmount int64 = 500
 	// BailoutCooldown is the cooldown period for bailouts (24 hours)
 	BailoutCooldown = 24 * time.Hour
-	// BailoutBalanceThreshold is the minimum balance to be eligible for bailout (100 cents = 1.00 WSC)
-	BailoutBalanceThreshold int64 = 100
+	// BailoutBalanceThreshold is the minimum balance to be eligible for bailout
+	BailoutBalanceThreshold int64 = 1
 )
 
 var db *sql.DB
@@ -818,7 +818,7 @@ func GetTopUsers(limit int) ([]LeaderboardEntry, error) {
 		} else {
 			entry.Username = ""
 		}
-		entry.BalanceDisplay = fmt.Sprintf("%.2f", float64(entry.Balance)/100)
+		entry.BalanceDisplay = fmt.Sprintf("%d", entry.Balance)
 
 		leaderboard = append(leaderboard, entry)
 	}

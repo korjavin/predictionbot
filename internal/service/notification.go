@@ -66,10 +66,9 @@ func NewNotificationService() (*NotificationService, error) {
 	}, nil
 }
 
-// formatBalance converts cents to WSC format
-func formatBalance(cents int64) string {
-	wsc := float64(cents) / 100.0
-	return fmt.Sprintf("%.2f WSC", wsc)
+// formatBalance formats balance as WSC
+func formatBalance(balance int64) string {
+	return fmt.Sprintf("%d WSC", balance)
 }
 
 // SendWinNotification sends a notification to a user when they win

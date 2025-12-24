@@ -198,7 +198,7 @@ async function renderUserStats() {
         document.getElementById('stat-total-bets').textContent = stats.total_bets || 0;
         document.getElementById('stat-wins').textContent = stats.wins || 0;
         document.getElementById('stat-win-rate').textContent = (stats.win_rate || 0).toFixed(1) + '%';
-        document.getElementById('stat-profit').textContent = formatBalance((stats.total_wins - stats.total_wager) / 100);
+        document.getElementById('stat-profit').textContent = formatBalance(stats.total_wins - stats.total_wager);
         
     } catch (error) {
         console.error('Failed to render stats:', error);
@@ -529,8 +529,8 @@ function renderMortgageButton() {
     
     if (!mortgageBtn || !currentUser) return;
     
-    // Show button if balance < 1.00 (100 cents)
-    if (currentUser.balance < 100) {
+    // Show button if balance < 1
+    if (currentUser.balance < 1) {
         mortgageBtn.style.display = 'block';
         mortgageInfo.style.display = 'block';
     } else {

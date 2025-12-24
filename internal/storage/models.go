@@ -10,7 +10,7 @@ type User struct {
 	TelegramID int64     `json:"telegram_id" db:"telegram_id"`
 	Username   string    `json:"username" db:"username"`
 	FirstName  string    `json:"first_name" db:"first_name"`
-	Balance    int64     `json:"balance" db:"balance"` // in cents (1000 = 10.00)
+	Balance    int64     `json:"balance" db:"balance"`
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at" db:"updated_at"`
 }
@@ -73,7 +73,7 @@ type Bet struct {
 	UserID   int64     `json:"user_id" db:"user_id"`
 	MarketID int64     `json:"market_id" db:"market_id"`
 	Outcome  Outcome   `json:"outcome" db:"outcome"`
-	Amount   int64     `json:"amount" db:"amount"` // in cents
+	Amount   int64     `json:"amount" db:"amount"`
 	PlacedAt time.Time `json:"placed_at" db:"placed_at"`
 }
 

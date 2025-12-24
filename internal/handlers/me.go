@@ -51,8 +51,8 @@ func HandleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Calculate balance display (convert cents to formatted string)
-	balanceDisplay := fmt.Sprintf("%.2f", float64(user.Balance)/100.0)
+	// Format balance as integer
+	balanceDisplay := fmt.Sprintf("%d", user.Balance)
 
 	response := UserResponse{
 		ID:             user.ID,
@@ -70,8 +70,8 @@ func HandleMe(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleBailout handles the POST /api/me/bailout endpoint
-// Users with balance < 100 cents can request a free bailout
-// Bailout resets balance to 50000 cents (500 WSC)
+// Users with balance < 1 can request a free bailout
+// Bailout resets balance to 500
 // 24-hour cooldown between bailouts
 func HandleBailout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -102,7 +102,7 @@ func HandleBailout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user is eligible (balance < 100 cents = 1.00 WSC)
+	// Check if user is eligible (balance < 1)
 	if user.Balance >= storage.BailoutBalanceThreshold {
 		logger.Debug(telegramID, "bailout_balance_too_high", fmt.Sprintf("balance=%d", user.Balance))
 		w.Header().Set("Content-Type", "application/json")

@@ -104,3 +104,49 @@ Task 10: Public News Channel (Broadcasting) - IN PROGRESS
 - Enhanced logging with [AUTH] prefix for easier debugging
 - Improved error messages in all auth failure cases
 - Added detailed server logs for auth success/failure paths
+
+## 2024-12-24 - Bug Fix: Betting Type Conversion Error
+### Problem
+- Users could create markets but betting failed with error:
+  `json: cannot unmarshal string into Go struct field PlaceBetRequest.market_id of type int64`
+
+### Root Cause
+- HTML data attributes (`btn.dataset.market`) return strings
+- Backend API expects `market_id` as int64
+- JavaScript was sending string instead of number in JSON payload
+
+### Fix Applied
+**Frontend (web/app.js:352):**
+- Added `parseInt()` conversion in `handleBetClick()` function:
+  ```javascript
+  const marketId = parseInt(btn.dataset.market, 10);
+  ```
+- Ensures market_id is sent as number type, matching backend expectations
+
+**Result:**
+- Betting functionality now works correctly
+- Users can successfully place bets on markets
+
+## 2024-12-24 - Bug Fix: Betting "User Not Found" Error
+### Problem
+- After fixing type conversion, betting still failed with "user not found" error
+- Log showed: `bet_attempt` succeeded but `bet_failed details=error=user not found`
+
+### Root Cause
+- Same ID mismatch pattern as HandleMe/HandleBailout
+- Context stores **Telegram ID** (e.g., 59701326)
+- `storage.PlaceBet()` expects **internal database ID** (e.g., 1, 2, 3...)
+- Handler was passing Telegram ID where internal DB ID was needed
+- PlaceBet's SQL query: `SELECT balance FROM users WHERE id = ?` expects `id` column (internal), not `telegram_id`
+
+### Fix Applied
+**Backend (internal/handlers/bets.go):**
+- Renamed `userID` variable to `telegramID` for clarity
+- Added early user lookup: `storage.GetUserByTelegramID(telegramID)` to get full user object
+- Changed `storage.PlaceBet(ctx, userID, ...)` to `storage.PlaceBet(ctx, user.ID, ...)`
+- Now correctly passes internal database ID to PlaceBet function
+- Re-fetch user balance using internal ID after bet placement
+
+**Result:**
+- Betting now works end-to-end
+- Correct user balance deducted and pool totals updated
