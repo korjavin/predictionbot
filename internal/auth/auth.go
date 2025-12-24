@@ -61,14 +61,34 @@ func ValidateInitData(initData string) (int64, error) {
 	}
 
 	// Create the data check string (sorted by key)
+	// IMPORTANT: The keys must be sorted alphabetically!
+	var dataCheckKeys []string
+	for key := range data {
+		dataCheckKeys = append(dataCheckKeys, key)
+	}
+	// Sort the keys
+	// Using simple bubble sort to avoid importing "sort" package
+	for i := 0; i < len(dataCheckKeys); i++ {
+		for j := i + 1; j < len(dataCheckKeys); j++ {
+			if dataCheckKeys[i] > dataCheckKeys[j] {
+				dataCheckKeys[i], dataCheckKeys[j] = dataCheckKeys[j], dataCheckKeys[i]
+			}
+		}
+	}
+
 	var dataCheck []string
-	for key, value := range data {
-		dataCheck = append(dataCheck, fmt.Sprintf("%s=%s", key, value))
+	for _, key := range dataCheckKeys {
+		dataCheck = append(dataCheck, fmt.Sprintf("%s=%s", key, data[key]))
 	}
 	dataCheckString := strings.Join(dataCheck, "\n")
 
-	// Compute the expected hash
-	h := hmac.New(sha256.New, []byte(botToken))
+	// Compute the secret key: HMAC_SHA256(<bot_token>, "WebAppData")
+	secretKey := hmac.New(sha256.New, []byte("WebAppData"))
+	secretKey.Write([]byte(botToken))
+	secret := secretKey.Sum(nil)
+
+	// Compute the expected hash: HMAC_SHA256(<secret>, <data_check_string>)
+	h := hmac.New(sha256.New, secret)
 	h.Write([]byte(dataCheckString))
 	computedHash := hex.EncodeToString(h.Sum(nil))
 
@@ -213,6 +233,13 @@ func GetOrCreateUser(telegramID int64, username, firstName string) (*storage.Use
 	return user, nil
 }
 
+// writeJSONError writes a JSON error response
+func writeJSONError(w http.ResponseWriter, statusCode int, errorMessage string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	fmt.Fprintf(w, `{"error": "%s"}`, errorMessage)
+}
+
 // Middleware returns an HTTP middleware that validates Telegram initData
 func Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -231,7 +258,8 @@ func Middleware(next http.Handler) http.Handler {
 		initData := r.Header.Get("X-Telegram-Init-Data")
 		if initData == "" {
 			logger.Debug(0, "auth_missing_header", fmt.Sprintf("path=%s", r.URL.Path))
-			http.Error(w, "Unauthorized: missing X-Telegram-Init-Data header", http.StatusUnauthorized)
+			log.Printf("[AUTH] Missing X-Telegram-Init-Data header for %s", r.URL.Path)
+			writeJSONError(w, http.StatusUnauthorized, "Missing authentication data")
 			return
 		}
 
@@ -248,7 +276,8 @@ func Middleware(next http.Handler) http.Handler {
 
 		if userStr == "" {
 			logger.Debug(0, "auth_missing_user", fmt.Sprintf("path=%s", r.URL.Path))
-			http.Error(w, "Unauthorized: user data not found", http.StatusUnauthorized)
+			log.Printf("[AUTH] User data not found in initData for %s", r.URL.Path)
+			writeJSONError(w, http.StatusUnauthorized, "User data not found")
 			return
 		}
 
@@ -256,27 +285,28 @@ func Middleware(next http.Handler) http.Handler {
 		username, firstName, err := extractUserInfo(userStr)
 		if err != nil {
 			logger.Debug(0, "auth_extract_failed", fmt.Sprintf("path=%s error=%v", r.URL.Path, err))
-			log.Printf("Failed to extract user info: %v", err)
-			http.Error(w, "Unauthorized: invalid user data", http.StatusUnauthorized)
+			log.Printf("[AUTH] Failed to extract user info for %s: %v", r.URL.Path, err)
+			writeJSONError(w, http.StatusUnauthorized, "Invalid user data format")
 			return
 		}
 
 		userID, err := ValidateInitData(initData)
 		if err != nil {
 			logger.Debug(0, "auth_validation_failed", fmt.Sprintf("path=%s error=%v", r.URL.Path, err))
-			log.Printf("Auth failed: %v", err)
-			http.Error(w, "Unauthorized: invalid initData", http.StatusUnauthorized)
+			log.Printf("[AUTH] Validation failed for %s: %v", r.URL.Path, err)
+			writeJSONError(w, http.StatusUnauthorized, "Authentication failed: "+err.Error())
 			return
 		}
 
 		logger.Debug(userID, "auth_middleware_success", fmt.Sprintf("path=%s", r.URL.Path))
+		log.Printf("[AUTH] Success: user_id=%d path=%s", userID, r.URL.Path)
 
 		// Get or create user (auto-registration with welcome bonus)
 		_, err = GetOrCreateUser(userID, username, firstName)
 		if err != nil {
 			logger.Debug(userID, "auth_user_failed", fmt.Sprintf("error=%v", err))
-			log.Printf("Failed to get/create user: %v", err)
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			log.Printf("[AUTH] Failed to get/create user %d: %v", userID, err)
+			writeJSONError(w, http.StatusInternalServerError, "Failed to load user profile")
 			return
 		}
 

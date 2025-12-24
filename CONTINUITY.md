@@ -71,3 +71,36 @@ Task 10: Public News Channel (Broadcasting) - IN PROGRESS
 - Integrated broadcasting into payoutService.ResolveMarket() via goroutine
 - Added CHANNEL_ID environment variable to docker-compose.yml
 - Broadcasting is optional (skips if CHANNEL_ID not set)
+
+## 2024-12-24 - Bug Fix: Blank Screen & Authentication Issues
+### Problem
+- Web app showing blank blue screen in Telegram browser
+- No visible error messages (console inaccessible)
+- CRITICAL: HMAC validation using wrong algorithm
+
+### Root Causes Found
+1. **Critical Auth Bug**: Hash validation was using bot token directly instead of derived secret key
+2. **Missing Key Sorting**: Data check string keys weren't sorted alphabetically (required by Telegram)
+3. **Silent Failures**: Frontend errors only logged to console (invisible in Telegram)
+4. **Poor Error Handling**: Backend returned generic HTTP errors instead of JSON
+
+### Fixes Applied
+
+**Frontend (web/app.js):**
+- Added global `telegramWebApp` and `initData` variables for safer access
+- Added `showGlobalError()` function to display errors visibly on screen
+- Added validation checks for Telegram WebApp availability
+- Added validation checks for empty/missing initData
+- Replaced all `window.Telegram.WebApp.initData` references with safe global variable
+- Improved error display with user-friendly messages and details
+- Enhanced fetchUserProfile() to parse and display backend error messages
+
+**Backend (internal/auth/auth.go):**
+- **FIXED CRITICAL BUG**: Implemented correct Telegram Web App HMAC validation:
+  - Step 1: Compute secret key = HMAC-SHA256(bot_token, "WebAppData")
+  - Step 2: Compute hash = HMAC-SHA256(secret_key, data_check_string)
+- Added alphabetical sorting of data check string keys (required by spec)
+- Added `writeJSONError()` helper for consistent JSON error responses
+- Enhanced logging with [AUTH] prefix for easier debugging
+- Improved error messages in all auth failure cases
+- Added detailed server logs for auth success/failure paths

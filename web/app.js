@@ -1,7 +1,12 @@
 // Initialize Telegram Web App
+let telegramWebApp = null;
+let initData = '';
+
 if (typeof window.Telegram !== 'undefined' && window.Telegram.WebApp) {
-    window.Telegram.WebApp.ready();
-    window.Telegram.WebApp.expand();
+    telegramWebApp = window.Telegram.WebApp;
+    telegramWebApp.ready();
+    telegramWebApp.expand();
+    initData = telegramWebApp.initData || '';
 }
 
 // Current active tab
@@ -9,12 +14,30 @@ let currentTab = 'markets';
 // Current user for leaderboard comparison
 let currentUser = null;
 
+// Show global error message
+function showGlobalError(message, details = '') {
+    const loadingEl = document.querySelector('.loading');
+    if (loadingEl) {
+        loadingEl.style.color = '#ff6b6b';
+        loadingEl.innerHTML = `
+            <div style="text-align: center; padding: 20px;">
+                <div style="font-size: 24px; margin-bottom: 12px;">❌</div>
+                <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">${escapeHtml(message)}</div>
+                ${details ? `<div style="font-size: 12px; color: #888; margin-top: 8px;">${escapeHtml(details)}</div>` : ''}
+            </div>
+        `;
+    }
+}
+
 // Function to fetch user profile with auth
 async function fetchUserProfile() {
     const response = await fetch('/api/me', {
-        headers: { 'X-Telegram-Init-Data': window.Telegram.WebApp.initData }
+        headers: { 'X-Telegram-Init-Data': initData }
     });
-    if (!response.ok) throw new Error('Failed to fetch user');
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `HTTP ${response.status}`);
+    }
     return response.json();
 }
 
@@ -51,40 +74,58 @@ async function displayUserProfile() {
     const profileUsernameEl = document.getElementById('profile-username');
     const profileBalanceEl = document.getElementById('profile-balance');
     const profileAvatarEl = document.getElementById('profile-avatar');
-    
+
+    // Check if Telegram WebApp is available
+    if (!telegramWebApp) {
+        showGlobalError(
+            'Telegram WebApp Not Available',
+            'This app must be opened inside Telegram. Please use a Telegram bot to access this app.'
+        );
+        return;
+    }
+
+    // Check if initData is present
+    if (!initData || initData.trim() === '') {
+        showGlobalError(
+            'Authentication Failed',
+            'No Telegram authentication data found. Please restart the app from your Telegram bot.'
+        );
+        return;
+    }
+
     try {
         const user = await fetchUserProfile();
         loadingEl.style.display = 'none';
         mainContentEl.style.display = 'block';
-        
+
         // Store current user for leaderboard comparison
         currentUser = user;
-        
+
         // Update header name (if it exists)
         if (userNameEl) {
             userNameEl.textContent = user.first_name;
         }
-        
+
         // Update balance in header
         userBalanceEl.textContent = formatBalance(user.balance) + ' WSC';
-        
+
         // Update profile tab
         profileNameEl.textContent = user.first_name;
         profileBalanceEl.textContent = formatBalance(user.balance) + ' WSC';
-        
+
         // Set avatar initial
         const initial = user.first_name ? user.first_name.charAt(0).toUpperCase() : '?';
         profileAvatarEl.textContent = initial;
-        
+
         if (user.username) {
             profileUsernameEl.textContent = '@' + user.username;
         } else {
             profileUsernameEl.textContent = '';
         }
-        
+
         // Render mortgage button if balance is low
         renderMortgageButton();
-        
+
         // Load initial tab content
         if (currentTab === 'markets') {
             renderMarkets();
@@ -93,16 +134,15 @@ async function displayUserProfile() {
         } else if (currentTab === 'profile') {
             renderProfile();
         }
-        
+
         // Set up navigation tabs
         setupNavigation();
     } catch (error) {
         console.error('Failed to load user profile:', error);
-        loadingEl.style.display = 'none';
-        if (userNameEl) {
-            userNameEl.textContent = 'Guest';
-        }
-        userBalanceEl.textContent = '0.00 WSC';
+        showGlobalError(
+            'Failed to Load Profile',
+            error.message || 'Unable to connect to server. Please check your connection and try again.'
+        );
     }
 }
 
@@ -148,7 +188,7 @@ async function renderProfile() {
 async function renderUserStats() {
     try {
         const response = await fetch('/api/me/stats', {
-            headers: { 'X-Telegram-Init-Data': window.Telegram.WebApp.initData }
+            headers: { 'X-Telegram-Init-Data': initData }
         });
         
         if (!response.ok) throw new Error('Failed to fetch stats');
@@ -172,10 +212,10 @@ async function renderUserStats() {
 // Fetch and display bet history
 async function renderBetHistory() {
     const historyListEl = document.getElementById('history-list');
-    
+
     try {
         const response = await fetch('/api/me/bets', {
-            headers: { 'X-Telegram-Init-Data': window.Telegram.WebApp.initData }
+            headers: { 'X-Telegram-Init-Data': initData }
         });
         
         if (!response.ok) throw new Error('Failed to fetch bet history');
@@ -228,7 +268,7 @@ async function renderBetHistory() {
 // Fetch markets from API
 async function fetchMarkets() {
     const response = await fetch('/api/markets', {
-        headers: { 'X-Telegram-Init-Data': window.Telegram.WebApp.initData }
+        headers: { 'X-Telegram-Init-Data': initData }
     });
     if (!response.ok) throw new Error('Failed to fetch markets');
     return response.json();
@@ -365,7 +405,7 @@ async function placeBet(marketId, outcome, amount) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-Telegram-Init-Data': window.Telegram.WebApp.initData
+            'X-Telegram-Init-Data': initData
         },
         body: JSON.stringify({
             market_id: marketId,
@@ -388,7 +428,7 @@ async function createMarket(question, expiresAt) {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-Telegram-Init-Data': window.Telegram.WebApp.initData
+            'X-Telegram-Init-Data': initData
         },
         body: JSON.stringify({
             question: question,
@@ -518,8 +558,8 @@ async function handleMortgageClick() {
         mortgageMessage.innerHTML = `<div class="success-message">${escapeHtml(result.message)}! New balance: ${formatBalance(result.new_balance)} WSC</div>`;
         
         // Play success sound (optional)
-        if (window.Telegram && window.Telegram.WebApp) {
-            window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+        if (telegramWebApp) {
+            telegramWebApp.HapticFeedback.notificationOccurred('success');
         }
         
         // Refresh user profile to update balance
@@ -542,8 +582,8 @@ async function handleMortgageClick() {
         mortgageBtn.textContent = '💸 Take Mortgage';
         
         // Haptic feedback for error
-        if (window.Telegram && window.Telegram.WebApp) {
-            window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
+        if (telegramWebApp) {
+            telegramWebApp.HapticFeedback.notificationOccurred('error');
         }
     }
 }
@@ -554,7 +594,7 @@ async function takeMortgage() {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'X-Telegram-Init-Data': window.Telegram.WebApp.initData
+            'X-Telegram-Init-Data': initData
         }
     });
     
@@ -576,7 +616,7 @@ async function takeMortgage() {
 // Fetch leaderboard from API
 async function fetchLeaderboard() {
     const response = await fetch('/api/leaderboard', {
-        headers: { 'X-Telegram-Init-Data': window.Telegram.WebApp.initData }
+        headers: { 'X-Telegram-Init-Data': initData }
     });
     if (!response.ok) throw new Error('Failed to fetch leaderboard');
     return response.json();
