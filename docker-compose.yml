@@ -2,16 +2,21 @@ version: '3.8'
 
 services:
   predictionbot:
-    build: .
+    image: ghcr.io/korjavin/predictionbot:latest
     container_name: predictionbot
-    ports:
-      - "8080:8080"
+    networks:
+      - traefik_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.predictionbot.rule=Host(`${HOSTNAME}`)"
+      - "traefik.http.routers.predictionbot.entrypoints=websecure"
+      - "traefik.http.routers.predictionbot.tls.certresolver=myresolver"
+      - "traefik.http.services.predictionbot.loadbalancer.server.port=8080"
     environment:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - WEB_APP_URL=${WEB_APP_URL:-http://localhost:8080}
+      - WEB_APP_URL=${WEB_APP_URL}
       - PORT=8080
     volumes:
-      - ./web:/app/web:ro
       - ./data:/app/data
     restart: unless-stopped
     healthcheck:
@@ -20,3 +25,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+networks:
+  traefik_network:
+    name: ${NETWORK_NAME:-traefik_network}
+    external: true
