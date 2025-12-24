@@ -28,14 +28,6 @@ const (
 // ValidateInitData validates the Telegram initData string
 // It checks the HMAC-SHA256 signature and the auth_date
 func ValidateInitData(initData string) (int64, error) {
-	// Debug: log raw initData length and sample
-	log.Printf("[AUTH] Raw initData length: %d chars", len(initData))
-	if len(initData) > 400 {
-		log.Printf("[AUTH] Raw initData (first 200 chars): %s...", initData[:200])
-		log.Printf("[AUTH] Raw initData (last 200 chars): ...%s", initData[len(initData)-200:])
-	} else {
-		log.Printf("[AUTH] Raw initData: %s", initData)
-	}
 
 	// Parse the initData string using url.ParseQuery
 	// This automatically URL-decodes the values
@@ -66,15 +58,6 @@ func ValidateInitData(initData string) (int64, error) {
 		return 0, fmt.Errorf("hash not found in initData")
 	}
 
-	// Debug: log all parsed fields (except sensitive data)
-	log.Printf("[AUTH] Parsed fields: hash=%s..., %d other fields", hash[:16], len(data))
-	for k := range data {
-		if k != "user" {
-			log.Printf("[AUTH]   %s = %s", k, data[k])
-		} else {
-			log.Printf("[AUTH]   %s = (user data, %d chars)", k, len(data[k]))
-		}
-	}
 
 	// Get the bot token
 	botToken := os.Getenv("TELEGRAM_BOT_TOKEN")
@@ -85,12 +68,6 @@ func ValidateInitData(initData string) (int64, error) {
 	// Trim any whitespace from bot token (common issue)
 	botToken = strings.TrimSpace(botToken)
 
-	// Debug: log bot token info (first 10 chars only for security)
-	tokenPreview := botToken
-	if len(tokenPreview) > 10 {
-		tokenPreview = tokenPreview[:10] + "..." + tokenPreview[len(tokenPreview)-4:]
-	}
-	log.Printf("[AUTH] Bot token preview: %s (length: %d, trimmed)", tokenPreview, len(botToken))
 
 	// Create the data check string (sorted by key)
 	// IMPORTANT: The keys must be sorted alphabetically!
@@ -114,26 +91,12 @@ func ValidateInitData(initData string) (int64, error) {
 	}
 	dataCheckString := strings.Join(dataCheck, "\n")
 
-	// Debug: log the data check string
-	log.Printf("[AUTH] Data check string keys: %v", dataCheckKeys)
-	log.Printf("[AUTH] Data check string length: %d chars", len(dataCheckString))
-	// Log complete data check string for debugging (user field will be truncated)
-	lines := strings.Split(dataCheckString, "\n")
-	log.Printf("[AUTH] Data check string (%d lines):", len(lines))
-	for i, line := range lines {
-		if strings.HasPrefix(line, "user=") && len(line) > 100 {
-			log.Printf("[AUTH]   Line %d: user=...(%d chars)", i, len(line)-5)
-		} else {
-			log.Printf("[AUTH]   Line %d: %s", i, line)
-		}
-	}
 
 	// Compute the secret key: HMAC_SHA256(key="WebAppData", message=bot_token)
 	// The constant string "WebAppData" is used as the key
 	secretKey := hmac.New(sha256.New, []byte("WebAppData"))
 	secretKey.Write([]byte(botToken))
 	secret := secretKey.Sum(nil)
-	log.Printf("[AUTH] Secret key (hex): %s", hex.EncodeToString(secret)[:32]+"...")
 
 	// Compute the expected hash: HMAC_SHA256(<secret>, <data_check_string>)
 	h := hmac.New(sha256.New, secret)
@@ -142,8 +105,7 @@ func ValidateInitData(initData string) (int64, error) {
 
 	// Compare hashes
 	if hash != computedHash {
-		logger.Debug(0, "auth_invalid_hash", fmt.Sprintf("received_hash=%s computed_hash=%s", hash[:16]+"...", computedHash[:16]+"..."))
-		log.Printf("[AUTH] Hash mismatch - received: %s, computed: %s", hash, computedHash)
+		logger.Debug(0, "auth_invalid_hash", "hash_mismatch")
 		return 0, fmt.Errorf("invalid hash")
 	}
 
@@ -330,7 +292,6 @@ func Middleware(next http.Handler) http.Handler {
 		}
 
 		userStr := userValues[0] // ParseQuery already URL-decoded it
-		log.Printf("[AUTH] Decoded user data: %s", userStr)
 
 		// Extract user info
 		username, firstName, err := extractUserInfo(userStr)
