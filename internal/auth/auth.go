@@ -37,22 +37,23 @@ func ValidateInitData(initData string) (int64, error) {
 		log.Printf("[AUTH] Raw initData: %s", initData)
 	}
 
-	// Parse the initData string
-	parts := strings.Split(initData, "&")
-	if len(parts) == 0 {
-		return 0, fmt.Errorf("empty initData")
+	// Parse the initData string using url.ParseQuery
+	// This automatically URL-decodes the values
+	parsedData, err := url.ParseQuery(initData)
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse initData: %w", err)
 	}
 
 	// Extract hash and other data
 	var hash string
 	data := make(map[string]string)
 
-	for _, part := range parts {
-		kv := strings.SplitN(part, "=", 2)
-		if len(kv) != 2 {
+	for key, values := range parsedData {
+		if len(values) == 0 {
 			continue
 		}
-		key, value := kv[0], kv[1]
+		value := values[0] // Use first value
+
 		if key == "hash" {
 			hash = value
 		} else if key == "signature" {
@@ -173,15 +174,9 @@ func ValidateInitData(initData string) (int64, error) {
 		return 0, fmt.Errorf("user not found in initData")
 	}
 
-	// URL-decode the user string
-	decodedUserStr, err := url.QueryUnescape(userStr)
-	if err != nil {
-		return 0, fmt.Errorf("failed to decode user data: %w", err)
-	}
-
-	// Parse user JSON to extract id
+	// Parse user JSON to extract id (already URL-decoded by ParseQuery)
 	// Simple parsing: look for "id":number pattern
-	userID, err := extractUserID(decodedUserStr)
+	userID, err := extractUserID(userStr)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse user: %w", err)
 	}
@@ -320,35 +315,27 @@ func Middleware(next http.Handler) http.Handler {
 		}
 
 		// Parse initData to get user info
-		parts := strings.Split(initData, "&")
-		var userStr string
-		for _, part := range parts {
-			kv := strings.SplitN(part, "=", 2)
-			if len(kv) == 2 && kv[0] == "user" {
-				userStr = kv[1]
-				break
-			}
+		parsedData, err := url.ParseQuery(initData)
+		if err != nil {
+			logger.Debug(0, "auth_parse_failed", fmt.Sprintf("path=%s error=%v", r.URL.Path, err))
+			log.Printf("[AUTH] Failed to parse initData for %s: %v", r.URL.Path, err)
+			writeJSONError(w, http.StatusUnauthorized, "Invalid initData format")
+			return
 		}
 
-		if userStr == "" {
+		userValues := parsedData["user"]
+		if len(userValues) == 0 {
 			logger.Debug(0, "auth_missing_user", fmt.Sprintf("path=%s", r.URL.Path))
 			log.Printf("[AUTH] User data not found in initData for %s", r.URL.Path)
 			writeJSONError(w, http.StatusUnauthorized, "User data not found")
 			return
 		}
 
-		// URL-decode the user string
-		decodedUserStr, err := url.QueryUnescape(userStr)
-		if err != nil {
-			logger.Debug(0, "auth_decode_failed", fmt.Sprintf("path=%s error=%v", r.URL.Path, err))
-			log.Printf("[AUTH] Failed to decode user data for %s: %v", r.URL.Path, err)
-			writeJSONError(w, http.StatusUnauthorized, "Invalid user data encoding")
-			return
-		}
-		log.Printf("[AUTH] Decoded user data: %s", decodedUserStr)
+		userStr := userValues[0] // ParseQuery already URL-decoded it
+		log.Printf("[AUTH] Decoded user data: %s", userStr)
 
 		// Extract user info
-		username, firstName, err := extractUserInfo(decodedUserStr)
+		username, firstName, err := extractUserInfo(userStr)
 		if err != nil {
 			logger.Debug(0, "auth_extract_failed", fmt.Sprintf("path=%s error=%v", r.URL.Path, err))
 			log.Printf("[AUTH] Failed to extract user info for %s: %v", r.URL.Path, err)
