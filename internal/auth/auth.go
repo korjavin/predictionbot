@@ -83,12 +83,15 @@ func ValidateInitData(initData string) (int64, error) {
 		return 0, fmt.Errorf("TELEGRAM_BOT_TOKEN not set")
 	}
 
+	// Trim any whitespace from bot token (common issue)
+	botToken = strings.TrimSpace(botToken)
+
 	// Debug: log bot token info (first 10 chars only for security)
 	tokenPreview := botToken
 	if len(tokenPreview) > 10 {
 		tokenPreview = tokenPreview[:10] + "..." + tokenPreview[len(tokenPreview)-4:]
 	}
-	log.Printf("[AUTH] Bot token preview: %s (length: %d)", tokenPreview, len(botToken))
+	log.Printf("[AUTH] Bot token preview: %s (length: %d, trimmed)", tokenPreview, len(botToken))
 
 	// Create the data check string (sorted by key)
 	// IMPORTANT: The keys must be sorted alphabetically!
@@ -112,14 +115,18 @@ func ValidateInitData(initData string) (int64, error) {
 	}
 	dataCheckString := strings.Join(dataCheck, "\n")
 
-	// Debug: log the data check string (truncated for security)
+	// Debug: log the data check string
 	log.Printf("[AUTH] Data check string keys: %v", dataCheckKeys)
 	log.Printf("[AUTH] Data check string length: %d chars", len(dataCheckString))
-	// Log first 200 chars of data check string for debugging
-	if len(dataCheckString) > 200 {
-		log.Printf("[AUTH] Data check string (first 200 chars): %s...", dataCheckString[:200])
-	} else {
-		log.Printf("[AUTH] Data check string: %s", dataCheckString)
+	// Log complete data check string for debugging (user field will be truncated)
+	lines := strings.Split(dataCheckString, "\n")
+	log.Printf("[AUTH] Data check string (%d lines):", len(lines))
+	for i, line := range lines {
+		if strings.HasPrefix(line, "user=") && len(line) > 100 {
+			log.Printf("[AUTH]   Line %d: user=...(%d chars)", i, len(line)-5)
+		} else {
+			log.Printf("[AUTH]   Line %d: %s", i, line)
+		}
 	}
 
 	// Compute the secret key: HMAC_SHA256(key="WebAppData", message=bot_token)
