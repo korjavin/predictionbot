@@ -84,6 +84,8 @@ func runMigrations() error {
 			question TEXT NOT NULL,
 			image_url TEXT,
 			status TEXT NOT NULL DEFAULT 'ACTIVE',
+			outcome TEXT,
+			resolved_at DATETIME,
 			expires_at DATETIME NOT NULL,
 			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY (creator_id) REFERENCES users(id)
@@ -136,6 +138,33 @@ func runMigrations() error {
 	_, err = db.Exec(createIndexes)
 	if err != nil {
 		return err
+	}
+
+	// Migration: Add outcome and resolved_at columns if they don't exist
+	// SQLite's ALTER TABLE ADD COLUMN is idempotent-ish (won't fail if column exists in newer versions)
+	// But we'll check first to be safe
+	var outcomeExists int
+	err = db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('markets') WHERE name='outcome'").Scan(&outcomeExists)
+	if err != nil {
+		return err
+	}
+	if outcomeExists == 0 {
+		_, err = db.Exec("ALTER TABLE markets ADD COLUMN outcome TEXT")
+		if err != nil {
+			return err
+		}
+	}
+
+	var resolvedAtExists int
+	err = db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('markets') WHERE name='resolved_at'").Scan(&resolvedAtExists)
+	if err != nil {
+		return err
+	}
+	if resolvedAtExists == 0 {
+		_, err = db.Exec("ALTER TABLE markets ADD COLUMN resolved_at DATETIME")
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

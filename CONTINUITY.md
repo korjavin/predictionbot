@@ -22,6 +22,7 @@ Task 8: Add Server-Side Debug Logs
 - Task 2: COMPLETED
 - Task 3: COMPLETED
 - Task 4: COMPLETED
+- Task 5: COMPLETED
 - Task 8: COMPLETED
 
 ## Done
@@ -29,10 +30,10 @@ Task 8: Add Server-Side Debug Logs
 - Task 2: SQLite persistence & user economy
 - Task 3: Market Creation & Listing
 - Task 4: Betting Engine & Parimutuel Logic
+- Task 5: Market Resolution & Payout Engine
 - Task 8: Add Server-Side Debug Logs
 
 ## Now
-- Task 5 (Market Resolution)
 - Task 6 (Admin Controls)
 - Task 7 (Bot Market Commands)
 
@@ -43,11 +44,15 @@ Task 8: Add Server-Side Debug Logs
 - None
 
 ## Working set (files/ids/commands)
-- internal/logger/logger.go (New shared logging package)
+- internal/service/market_worker.go (Background worker for auto-locking)
+- internal/service/payout.go (Market resolution and payout logic)
+- internal/handlers/markets.go (Market endpoints including resolve)
+- internal/storage/sqlite.go (Database schema and migrations)
+- cmd/main.go (Application entry point)
+- internal/logger/logger.go (Shared logging package)
 - internal/bot/bot.go
 - internal/auth/auth.go
 - internal/handlers/me.go
-- internal/handlers/markets.go
 - internal/handlers/bets.go
 
 ## 2024-12-24 - Debug Logging Refactor (Task 8 - COMPLETED)
@@ -79,6 +84,30 @@ Task 8: Add Server-Side Debug Logs
 - Fixed error handling with proper JSON responses and UI state restoration
 - Transaction type: BET_PLACED per specification
 - All validation: positive amounts, sufficient balance, active markets only
+
+## 2024-12-24 - Market Resolution & Payout Engine (Task 5 - COMPLETED)
+- Created internal/service/market_worker.go with auto-locking background worker
+  - Goroutine runs every 1 minute to check for expired markets
+  - Automatically updates ACTIVE markets with expires_at < NOW to LOCKED status
+  - Prevents late betting on expired markets
+- Implemented internal/service/payout.go with resolution logic
+  - ResolveMarket() validates only creator can resolve their market
+  - Parimutuel calculation: Payout = (UserBet * TotalPool) / WinningPool
+  - Edge case: WinningPool == 0 refunds all bets
+  - SERIALIZABLE transaction for ACID compliance
+  - Creates WIN_PAYOUT or REFUND transaction records
+  - Updates market to FINALIZED with outcome and resolved_at timestamp
+- Added POST /api/markets/{id}/resolve endpoint in handlers/markets.go
+  - Request: {"outcome": "YES"} or {"outcome": "NO"}
+  - Response: {"status": "finalized", "payouts_processed": N}
+  - Proper error handling: 404 (not found), 403 (not creator), 409 (wrong status)
+- Database schema updates in storage/sqlite.go
+  - Added outcome TEXT column to markets table
+  - Added resolved_at DATETIME column to markets table
+  - Migration logic for existing databases
+- Integrated worker in cmd/main.go
+  - Worker starts on app startup, stops on graceful shutdown
+  - Registered /markets/{id}/resolve route
 
 ## 2024-12-24 - Bot Commands Implementation
 - Implemented Telegram bot commands in internal/bot/bot.go:

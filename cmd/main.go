@@ -11,6 +11,7 @@ import (
 	"predictionbot/internal/auth"
 	"predictionbot/internal/bot"
 	"predictionbot/internal/handlers"
+	"predictionbot/internal/service"
 	"predictionbot/internal/storage"
 )
 
@@ -35,6 +36,11 @@ func main() {
 	// Start bot in a goroutine
 	go bot.StartBot()
 
+	// Start market worker for auto-locking expired markets
+	marketWorker := service.NewMarketWorker()
+	marketWorker.Start()
+	defer marketWorker.Stop()
+
 	// Set up HTTP server with auth middleware
 	mux := http.NewServeMux()
 
@@ -43,6 +49,7 @@ func main() {
 	apiMux.HandleFunc("/ping", handlers.PingHandler)
 	apiMux.HandleFunc("/me", handlers.HandleMe)
 	apiMux.HandleFunc("/markets", handlers.HandleMarkets)
+	apiMux.HandleFunc("/markets/", handlers.HandleMarketResolve) // Handles /markets/{id}/resolve
 	apiMux.HandleFunc("/bets", handlers.HandleBets)
 
 	// Apply auth middleware to API routes (except ping for testing)

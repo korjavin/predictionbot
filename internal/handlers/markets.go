@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"predictionbot/internal/auth"
 	"predictionbot/internal/logger"
+	"predictionbot/internal/service"
 	"predictionbot/internal/storage"
 )
 
@@ -157,4 +160,94 @@ func handleListMarkets(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(markets)
+}
+
+// ResolveMarketRequest is the request body for resolving a market
+type ResolveMarketRequest struct {
+	Outcome string `json:"outcome"`
+}
+
+// ResolveMarketResponse is the response for resolving a market
+type ResolveMarketResponse struct {
+	Status           string `json:"status"`
+	PayoutsProcessed int    `json:"payouts_processed"`
+}
+
+// HandleMarketResolve handles POST /api/markets/{id}/resolve
+func HandleMarketResolve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		logger.Debug(0, "resolve_invalid_method", "method="+r.Method+" path="+r.URL.Path)
+		respondWithError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get user ID from context
+	ctx := r.Context()
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok {
+		logger.Debug(0, "resolve_unauthorized", "path="+r.URL.Path)
+		respondWithError(w, "Unauthorized: user not in context", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse market ID from URL path
+	// Expected path: /api/markets/{id}/resolve (after StripPrefix removes /api)
+	// So we get /markets/{id}/resolve
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathParts) < 3 || pathParts[0] != "markets" || pathParts[2] != "resolve" {
+		logger.Debug(userID, "resolve_invalid_path", "path="+r.URL.Path)
+		respondWithError(w, "Invalid path format", http.StatusBadRequest)
+		return
+	}
+
+	marketID, err := strconv.ParseInt(pathParts[1], 10, 64)
+	if err != nil {
+		logger.Debug(userID, "resolve_invalid_id", "id="+pathParts[1])
+		respondWithError(w, "Invalid market ID", http.StatusBadRequest)
+		return
+	}
+
+	// Parse request body
+	var req ResolveMarketRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logger.Debug(userID, "resolve_invalid_body", "error="+err.Error())
+		respondWithError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate outcome
+	if req.Outcome != "YES" && req.Outcome != "NO" {
+		logger.Debug(userID, "resolve_invalid_outcome", "outcome="+req.Outcome)
+		respondWithError(w, "Invalid outcome: must be 'YES' or 'NO'", http.StatusBadRequest)
+		return
+	}
+
+	// Resolve the market using the payout service
+	payoutService := service.NewPayoutService()
+	payoutsProcessed, err := payoutService.ResolveMarket(ctx, marketID, userID, req.Outcome)
+	if err != nil {
+		errMsg := err.Error()
+		logger.Debug(userID, "resolve_failed", fmt.Sprintf("market_id=%d error=%s", marketID, errMsg))
+		if strings.Contains(errMsg, "not found") {
+			respondWithError(w, errMsg, http.StatusNotFound)
+		} else if strings.Contains(errMsg, "only the market creator") {
+			respondWithError(w, errMsg, http.StatusForbidden)
+		} else if strings.Contains(errMsg, "cannot be resolved") {
+			respondWithError(w, errMsg, http.StatusConflict)
+		} else if strings.Contains(errMsg, "invalid outcome") {
+			respondWithError(w, errMsg, http.StatusBadRequest)
+		} else {
+			respondWithError(w, "Failed to resolve market", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	logger.Debug(userID, "resolve_success", fmt.Sprintf("market_id=%d outcome=%s payouts=%d", marketID, req.Outcome, payoutsProcessed))
+	response := ResolveMarketResponse{
+		Status:           "finalized",
+		PayoutsProcessed: payoutsProcessed,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
 }
