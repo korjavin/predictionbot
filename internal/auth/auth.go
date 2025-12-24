@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -123,9 +124,15 @@ func ValidateInitData(initData string) (int64, error) {
 		return 0, fmt.Errorf("user not found in initData")
 	}
 
+	// URL-decode the user string
+	decodedUserStr, err := url.QueryUnescape(userStr)
+	if err != nil {
+		return 0, fmt.Errorf("failed to decode user data: %w", err)
+	}
+
 	// Parse user JSON to extract id
 	// Simple parsing: look for "id":number pattern
-	userID, err := extractUserID(userStr)
+	userID, err := extractUserID(decodedUserStr)
 	if err != nil {
 		return 0, fmt.Errorf("failed to parse user: %w", err)
 	}
@@ -281,8 +288,18 @@ func Middleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// URL-decode the user string
+		decodedUserStr, err := url.QueryUnescape(userStr)
+		if err != nil {
+			logger.Debug(0, "auth_decode_failed", fmt.Sprintf("path=%s error=%v", r.URL.Path, err))
+			log.Printf("[AUTH] Failed to decode user data for %s: %v", r.URL.Path, err)
+			writeJSONError(w, http.StatusUnauthorized, "Invalid user data encoding")
+			return
+		}
+		log.Printf("[AUTH] Decoded user data: %s", decodedUserStr)
+
 		// Extract user info
-		username, firstName, err := extractUserInfo(userStr)
+		username, firstName, err := extractUserInfo(decodedUserStr)
 		if err != nil {
 			logger.Debug(0, "auth_extract_failed", fmt.Sprintf("path=%s error=%v", r.URL.Path, err))
 			log.Printf("[AUTH] Failed to extract user info for %s: %v", r.URL.Path, err)
