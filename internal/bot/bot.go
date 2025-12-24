@@ -1,11 +1,20 @@
 package bot
 
 import (
+	"fmt"
 	"log"
 	"os"
 
+	"predictionbot/internal/storage"
+
 	"gopkg.in/telebot.v3"
 )
+
+// formatBalance converts cents to WSC format
+func formatBalance(cents int64) string {
+	wsc := float64(cents) / 100.0
+	return fmt.Sprintf("%.2f WSC", wsc)
+}
 
 // StartBot initializes and starts the Telegram bot
 func StartBot() {
@@ -28,6 +37,25 @@ func StartBot() {
 
 	// Register /start command handler
 	b.Handle("/start", func(c telebot.Context) error {
+		telegramID := c.Sender().ID
+
+		// Get or create user
+		user, err := storage.GetUserByTelegramID(telegramID)
+		if err != nil {
+			return c.Send("Error retrieving user data. Please try again.")
+		}
+		if user == nil {
+			// Create new user
+			user, err = storage.CreateUser(
+				telegramID,
+				c.Sender().Username,
+				c.Sender().FirstName,
+			)
+			if err != nil {
+				return c.Send("Error creating user. Please try again.")
+			}
+		}
+
 		// Get the web app URL from environment or use default
 		webAppURL := os.Getenv("WEB_APP_URL")
 		if webAppURL == "" {
@@ -40,11 +68,79 @@ func StartBot() {
 			WebApp: &telebot.WebApp{URL: webAppURL},
 		}
 
-		// Send welcome message with button
-		return c.Send("Welcome to the Prediction Market! 🎉\n\nMake predictions on various topics and win rewards. Click the button below to start:", &telebot.ReplyMarkup{
+		// Send welcome message with user info
+		welcomeMsg := fmt.Sprintf("Welcome to the Prediction Market! 🎉\n\nHi, %s! You have %s.\n\nMake predictions on various topics and win rewards. Click the button below to start:",
+			user.FirstName, formatBalance(user.Balance))
+		return c.Send(welcomeMsg, &telebot.ReplyMarkup{
 			InlineKeyboard: [][]telebot.InlineButton{
 				{btn},
 			},
+		})
+	})
+
+	// Register /help command handler
+	b.Handle("/help", func(c telebot.Context) error {
+		helpText := `📚 *Available Commands*\n\n` +
+			`/start - Start the bot and receive your welcome bonus\n` +
+			`/balance - Check your current balance\n` +
+			`/me - View your profile information\n` +
+			`/help - Show this help message\n\n` +
+			`🎯 Open the Prediction Market web app to create markets and place bets!`
+		return c.Send(helpText, &telebot.SendOptions{
+			ParseMode: telebot.ModeMarkdown,
+		})
+	})
+
+	// Register /balance command handler
+	b.Handle("/balance", func(c telebot.Context) error {
+		telegramID := c.Sender().ID
+
+		user, err := storage.GetUserByTelegramID(telegramID)
+		if err != nil {
+			return c.Send("Error retrieving user data. Please try again.")
+		}
+		if user == nil {
+			return c.Send("You haven't started the bot yet. Use /start to create your account!")
+		}
+
+		balanceText := fmt.Sprintf(`💰 *Your Balance*\n\n`+
+			`Current Balance: %s\n`+
+			`\nUse the Prediction Market web app to place bets!`,
+			formatBalance(user.Balance))
+		return c.Send(balanceText, &telebot.SendOptions{
+			ParseMode: telebot.ModeMarkdown,
+		})
+	})
+
+	// Register /me command handler
+	b.Handle("/me", func(c telebot.Context) error {
+		telegramID := c.Sender().ID
+
+		user, err := storage.GetUserByTelegramID(telegramID)
+		if err != nil {
+			return c.Send("Error retrieving user data. Please try again.")
+		}
+		if user == nil {
+			return c.Send("You haven't started the bot yet. Use /start to create your account!")
+		}
+
+		profileText := fmt.Sprintf(`👤 *Your Profile*\n\n`+
+			`Name: %s\n`+
+			`Username: @%s\n`+
+			`Balance: %s\n`+
+			`Member since: %s`,
+			user.FirstName,
+			func() string {
+				if user.Username != "" {
+					return user.Username
+				} else {
+					return "N/A"
+				}
+			}(),
+			formatBalance(user.Balance),
+			user.CreatedAt.Format("January 2, 2006"))
+		return c.Send(profileText, &telebot.SendOptions{
+			ParseMode: telebot.ModeMarkdown,
 		})
 	})
 

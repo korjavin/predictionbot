@@ -1,3 +1,5 @@
+# APPEND-ONLY LOG - Never remove or overwrite existing entries
+
 # Continuity Ledger
 
 ## Goal (incl. success criteria)
@@ -44,3 +46,12 @@ Complete Task 3: Market Creation & Listing
 - cmd/main.go (route registration)
 - web/index.html (Create Market form + market feed)
 - web/app.js (renderMarkets + createMarket functions)
+
+## 2024-12-24 - Bot Commands Implementation
+- Implemented Telegram bot commands in internal/bot/bot.go:
+  - /start: Welcome message with short description and user's current balance (1000 WSC welcome bonus for new users), includes web app button
+  - /help: Lists all available commands with descriptions
+  - /balance: Shows user's current balance in WSC format
+  - /me: User profile info (name, username, balance, join date)
+- Added formatBalance() helper to convert cents to WSC format
+- Updated README.md with Bot Commands documentation section

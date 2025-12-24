@@ -36,5 +36,22 @@ To simplify the architecture, we use a two-step "Social Consensus" system:
 * **Frontend:** Vanilla JS + HTML5 (Telegram Web App)
 * **Deployment:** Docker + Portainer
 
+## 📋 Bot Commands
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Start the bot and receive your welcome bonus (1000 WSC). Opens the Prediction Market web app. |
+| `/balance` | Check your current balance in WSC (WiseCoin). |
+| `/me` | View your profile information including name, username, balance, and member since date. |
+| `/help` | Show this help message with available commands. |
+
+## 🎮 How to Use
+
+1. **Start the Bot:** Send `/start` to initialize your account and receive your welcome bonus.
+2. **Open Web App:** Click the "🎯 Open Prediction Market" button to access the full interface.
+3. **Create Markets:** Use the web app to create new prediction markets.
+4. **Place Bets:** Browse active markets and place bets on outcomes.
+5. **Check Balance:** Use `/balance` to see your current WSC balance.
+
 ---
 *Developed for educational purposes.*
