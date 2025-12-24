@@ -11,6 +11,7 @@ import (
 	"predictionbot/internal/auth"
 	"predictionbot/internal/bot"
 	"predictionbot/internal/handlers"
+	"predictionbot/internal/storage"
 )
 
 func main() {
@@ -20,6 +21,17 @@ func main() {
 		port = "8080"
 	}
 
+	// Initialize SQLite database
+	dbPath := os.Getenv("DATABASE_PATH")
+	if dbPath == "" {
+		dbPath = "/app/data/market.db"
+	}
+	log.Printf("Initializing database at: %s", dbPath)
+	if err := storage.InitDB(dbPath); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer storage.CloseDB()
+
 	// Start bot in a goroutine
 	go bot.StartBot()
 
@@ -28,7 +40,8 @@ func main() {
 
 	// API routes with auth middleware
 	apiMux := http.NewServeMux()
-	apiMux.HandleFunc("/api/ping", handlers.PingHandler)
+	apiMux.HandleFunc("/ping", handlers.PingHandler)
+	apiMux.HandleFunc("/me", handlers.HandleMe)
 
 	// Apply auth middleware to API routes (except ping for testing)
 	mux.Handle("/api/", auth.Middleware(http.StripPrefix("/api", apiMux)))

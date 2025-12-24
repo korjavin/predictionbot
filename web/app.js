@@ -4,39 +4,40 @@ if (typeof window.Telegram !== 'undefined' && window.Telegram.WebApp) {
     window.Telegram.WebApp.expand();
 }
 
-// Function to fetch the ping endpoint with auth
-async function checkAuth() {
-    const statusEl = document.getElementById('status');
+// Function to fetch user profile with auth
+async function fetchUserProfile() {
+    const response = await fetch('/api/me', {
+        headers: { 'X-Telegram-Init-Data': window.Telegram.WebApp.initData }
+    });
+    if (!response.ok) throw new Error('Failed to fetch user');
+    return response.json();
+}
+
+// Format balance as currency
+function formatBalance(balance) {
+    return balance.toFixed(2);
+}
+
+// Display user profile data
+async function displayUserProfile() {
+    const userNameEl = document.getElementById('user-name');
+    const userBalanceEl = document.getElementById('user-balance');
     const loadingEl = document.querySelector('.loading');
+    const profileEl = document.getElementById('user-profile');
     
     try {
-        // Get initData from Telegram Web App
-        const initData = window.Telegram?.WebApp?.initData || '';
-        
-        // Make request to /api/ping endpoint
-        const response = await fetch('/api/ping', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Telegram-Init-Data': initData
-            }
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            loadingEl.style.display = 'none';
-            statusEl.className = 'status success';
-            statusEl.textContent = `✅ Auth successful! Status: ${data.status}`;
-        } else {
-            throw new Error(`HTTP ${response.status}`);
-        }
-    } catch (error) {
-        console.log('Auth check failed (expected if not in Telegram):', error.message);
+        const user = await fetchUserProfile();
         loadingEl.style.display = 'none';
-        statusEl.className = 'status error';
-        statusEl.textContent = `ℹ️ Running outside Telegram or auth pending`;
+        profileEl.style.display = 'block';
+        userNameEl.textContent = user.first_name;
+        userBalanceEl.textContent = formatBalance(user.balance);
+    } catch (error) {
+        console.error('Failed to load user profile:', error);
+        loadingEl.style.display = 'none';
+        userNameEl.textContent = 'Guest';
+        userBalanceEl.textContent = '0.00';
     }
 }
 
-// Run auth check on page load
-document.addEventListener('DOMContentLoaded', checkAuth);
+// Run on page load
+document.addEventListener('DOMContentLoaded', displayUserProfile);

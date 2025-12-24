@@ -1,40 +1,58 @@
 # Continuity Ledger
 
-## Goal
-Execute task1 - Project Skeleton, HTTP Server & Telegram Auth for Telegram Prediction Market Bot
+## Goal (incl. success criteria)
+Complete Task 2: SQLite Persistence & User Economy
+- User data persists across Docker container restarts
+- Auto-registration with 1000 WSC welcome bonus
+- Transaction audit trail
 
 ## Constraints/Assumptions
-- Must follow monolithic Go backend architecture
-- Stateless Telegram auth via initData validation
-- Docker deployment on port 8080
-- Go 1.25.5, SQLite, Vanilla JS frontend
+- Use pure Go SQLite driver (modernc.org/sqlite)
+- Balance stored in cents (1000 WSC = 100000)
+- Database at /app/data/market.db
 
 ## Key decisions
-- Used `gopkg.in/telebot.v3` for Telegram Bot API
-- HMAC-SHA256 validation for initData
-- 24-hour auth_date replay protection
+- WAL mode for concurrency
+- Idempotent welcome bonus (one-time only)
+- User context passed through auth middleware
 
 ## State
-Task 1: COMPLETED
+- Task 2: COMPLETED
 
 ## Done
-- Project structure (cmd/, internal/, web/)
-- HTTP server with static file serving
-- Auth middleware for Telegram initData
-- Bot listener with /start command
-- Frontend (index.html, app.js)
-- Docker configuration (Dockerfile, docker-compose.yml)
+- Database infrastructure (internal/storage/sqlite.go, models.go)
+- Auth service auto-registration (internal/auth/auth.go)
+- GET /api/me endpoint (internal/handlers/me.go)
+- Frontend user display (web/app.js, web/index.html)
+- Docker volume config (docker-compose.yml, Dockerfile)
+- Persistence testing
 
 ## Now
-Task 1 deployment verification
+- Awaiting user feedback on Task 2 completion
 
 ## Next
-Awaiting user feedback or proceed to task2
+- Proceed to Task 3 (Markets & Betting)
 
 ## Open questions
-None
+- None
 
-## Working set
-- cmd/main.go, internal/auth/auth.go, internal/bot/bot.go
-- web/index.html, web/app.js
-- Dockerfile, docker-compose.yml
+## Working set (files/ids/commands)
+- go.mod (sqlite dependency)
+- internal/storage/sqlite.go
+- internal/storage/models.go
+- internal/auth/auth.go
+- internal/handlers/me.go
+- web/app.js
+- web/index.html
+- docker-compose.yml
+- Dockerfile
+
+---
+
+## 2025-12-24T14:15:00Z - Task 2 COMPLETED
+- SQLite persistence implemented with WAL mode
+- User auto-registration with 1000 WSC welcome bonus working
+- GET /api/me endpoint returns user profile and balance
+- Frontend displays user data and balance
+- Docker volumes configured for data persistence
+- All tests passed

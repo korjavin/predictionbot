@@ -12,6 +12,7 @@ services:
       - PORT=8080
     volumes:
       - ./web:/app/web:ro
+      - ./data:/app/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/ping"]

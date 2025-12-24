@@ -34,6 +34,9 @@ WORKDIR /app
 COPY --from=builder /app/main .
 COPY --from=builder /app/web ./web
 
+# Create data directory for SQLite database
+RUN mkdir -p /app/data
+
 # Change ownership to non-root user
 RUN chown -R app:app /app
 

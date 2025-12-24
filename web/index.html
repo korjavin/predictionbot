@@ -23,24 +23,35 @@
             font-size: 18px;
             color: var(--tg-theme-hint-color, #888888);
         }
-        .status {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 8px;
+        #user-profile {
+            display: none;
+        }
+        #user-profile h1 {
+            font-size: 24px;
+            margin-bottom: 20px;
+        }
+        .balance {
+            font-size: 20px;
+            padding: 15px 25px;
+            border-radius: 12px;
             background-color: var(--tg-theme-secondary-bg-color, #16213e);
+            color: var(--tg-theme-text-color, #ffffff);
         }
-        .success {
-            color: #4ade80;
-        }
-        .error {
-            color: #f87171;
+        .balance span {
+            font-weight: bold;
+            color: var(--tg-theme-button-color, #4ade80);
         }
     </style>
 </head>
 <body>
     <div id="app">
         <p class="loading">Loading...</p>
-        <div id="status" class="status"></div>
+        <div id="user-profile">
+            <h1>Welcome, <span id="user-name">Loading...</span></h1>
+            <div class="balance">
+                Balance: <span id="user-balance">---</span> WSC
+            </div>
+        </div>
     </div>
     <script src="app.js"></script>
 </body>
