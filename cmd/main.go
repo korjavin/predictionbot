@@ -43,6 +43,7 @@ func main() {
 	apiMux.HandleFunc("/ping", handlers.PingHandler)
 	apiMux.HandleFunc("/me", handlers.HandleMe)
 	apiMux.HandleFunc("/markets", handlers.HandleMarkets)
+	apiMux.HandleFunc("/bets", handlers.HandleBets)
 
 	// Apply auth middleware to API routes (except ping for testing)
 	mux.Handle("/api/", auth.Middleware(http.StripPrefix("/api", apiMux)))

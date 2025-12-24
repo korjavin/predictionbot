@@ -158,6 +158,93 @@
             font-size: 14px;
             margin-top: 8px;
         }
+        /* Market Odds */
+        .market-odds {
+            font-size: 14px;
+            font-weight: 600;
+            margin: 12px 0;
+            padding: 8px 12px;
+            background-color: var(--tg-theme-bg-color, #1a1a2e);
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+        }
+        .odds-yes {
+            color: var(--tg-theme-button-color, #4ade80);
+        }
+        .odds-no {
+            color: #ff6b6b;
+        }
+        .odds-separator {
+            color: var(--tg-theme-hint-color, #888888);
+        }
+        /* Betting UI */
+        .betting-ui {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--tg-theme-hint-color, #888888);
+        }
+        .betting-ui.disabled {
+            opacity: 0.5;
+        }
+        .bet-amount-group {
+            margin-bottom: 12px;
+        }
+        .bet-amount-group input {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--tg-theme-hint-color, #888888);
+            border-radius: 8px;
+            background-color: var(--tg-theme-bg-color, #1a1a2e);
+            color: var(--tg-theme-text-color, #ffffff);
+            font-size: 16px;
+            text-align: center;
+        }
+        .bet-amount-group input:focus {
+            outline: none;
+            border-color: var(--tg-theme-button-color, #4ade80);
+        }
+        .bet-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        .bet-btn {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: opacity 0.2s;
+        }
+        .bet-btn:active {
+            opacity: 0.7;
+        }
+        .bet-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .bet-btn small {
+            display: block;
+            font-size: 12px;
+            font-weight: normal;
+            margin-top: 4px;
+        }
+        .btn-yes {
+            background-color: var(--tg-theme-button-color, #4ade80);
+            color: #000000;
+        }
+        .btn-no {
+            background-color: #ff6b6b;
+            color: #ffffff;
+        }
+        .bet-message {
+            margin-top: 12px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>

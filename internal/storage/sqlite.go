@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"path/filepath"
@@ -89,12 +90,27 @@ func runMigrations() error {
 		)
 	`
 
+	betsTable := `
+		CREATE TABLE IF NOT EXISTS bets (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			market_id INTEGER NOT NULL,
+			outcome TEXT NOT NULL CHECK (outcome IN ('YES', 'NO')),
+			amount INTEGER NOT NULL,
+			placed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (user_id) REFERENCES users(id),
+			FOREIGN KEY (market_id) REFERENCES markets(id)
+		)
+	`
+
 	// Create indexes for better query performance
 	createIndexes := `
 		CREATE INDEX IF NOT EXISTS idx_transactions_user_id ON transactions(user_id);
 		CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at);
 		CREATE INDEX IF NOT EXISTS idx_markets_status ON markets(status);
 		CREATE INDEX IF NOT EXISTS idx_markets_created_at ON markets(created_at);
+		CREATE INDEX IF NOT EXISTS idx_bets_user_market ON bets(user_id, market_id);
+		CREATE INDEX IF NOT EXISTS idx_bets_market ON bets(market_id);
 	`
 
 	_, err := db.Exec(usersTable)
@@ -108,6 +124,11 @@ func runMigrations() error {
 	}
 
 	_, err = db.Exec(marketsTable)
+	if err != nil {
+		return err
+	}
+
+	_, err = db.Exec(betsTable)
 	if err != nil {
 		return err
 	}
@@ -346,4 +367,140 @@ func ListActiveMarketsWithCreator() ([]MarketWithCreator, error) {
 	}
 
 	return markets, nil
+}
+
+// PlaceBet places a bet on a market with ACID transaction
+func PlaceBet(ctx context.Context, userID, marketID int64, outcome string, amount int64) error {
+	// Validate outcome
+	if outcome != string(OutcomeYes) && outcome != string(OutcomeNo) {
+		return fmt.Errorf("invalid outcome: must be 'YES' or 'NO'")
+	}
+
+	// Validate amount
+	if amount <= 0 {
+		return fmt.Errorf("invalid amount: must be greater than 0")
+	}
+
+	// Begin immediate transaction for atomicity
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable})
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Check user balance
+	var userBalance int64
+	err = tx.QueryRowContext(ctx, `SELECT balance FROM users WHERE id = ?`, userID).Scan(&userBalance)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("user not found")
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get user balance: %w", err)
+	}
+
+	if userBalance < amount {
+		return fmt.Errorf("insufficient funds: have %d, need %d", userBalance, amount)
+	}
+
+	// Check market exists and is active
+	var marketStatus string
+	var expiresAt time.Time
+	err = tx.QueryRowContext(ctx, `SELECT status, expires_at FROM markets WHERE id = ?`, marketID).Scan(&marketStatus, &expiresAt)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("market not found")
+	}
+	if err != nil {
+		return fmt.Errorf("failed to get market: %w", err)
+	}
+
+	if marketStatus != string(MarketStatusActive) {
+		return fmt.Errorf("market is not active: status is %s", marketStatus)
+	}
+
+	if time.Now().After(expiresAt) {
+		return fmt.Errorf("market has expired")
+	}
+
+	// Update user balance
+	_, err = tx.ExecContext(ctx, `UPDATE users SET balance = balance - ? WHERE id = ?`, amount, userID)
+	if err != nil {
+		return fmt.Errorf("failed to update balance: %w", err)
+	}
+
+	// Insert bet record
+	result, err := tx.ExecContext(ctx, `
+		INSERT INTO bets (user_id, market_id, outcome, amount)
+		VALUES (?, ?, ?, ?)
+	`, userID, marketID, outcome, amount)
+	if err != nil {
+		return fmt.Errorf("failed to insert bet: %w", err)
+	}
+
+	betID, err := result.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("failed to get bet id: %w", err)
+	}
+
+	// Log the transaction
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO transactions (user_id, amount, source_type, description)
+		VALUES (?, ?, 'BET_PLACED', ?)
+	`, userID, -amount, fmt.Sprintf("Bet #%d on market #%d (%s)", betID, marketID, outcome))
+	if err != nil {
+		return fmt.Errorf("failed to log transaction: %w", err)
+	}
+
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+// GetPoolTotals calculates the total pool amounts for a market
+func GetPoolTotals(marketID int64) (poolYes, poolNo int64, err error) {
+	err = db.QueryRow(`
+		SELECT COALESCE(SUM(CASE WHEN outcome = 'YES' THEN amount ELSE 0 END), 0) as pool_yes,
+		       COALESCE(SUM(CASE WHEN outcome = 'NO' THEN amount ELSE 0 END), 0) as pool_no
+		FROM bets
+		WHERE market_id = ?
+	`, marketID).Scan(&poolYes, &poolNo)
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to get pool totals: %w", err)
+	}
+	return poolYes, poolNo, nil
+}
+
+// GetMarketWithPools returns a market with pool totals populated
+func GetMarketWithPools(marketID int64) (*MarketWithCreator, error) {
+	var market MarketWithCreator
+	err := db.QueryRow(`
+		SELECT m.id, m.question, COALESCE(u.first_name, 'Unknown'),
+		       m.expires_at, 0, 0
+		FROM markets m
+		LEFT JOIN users u ON m.creator_id = u.id
+		WHERE m.id = ?
+	`, marketID).Scan(
+		&market.ID,
+		&market.Question,
+		&market.CreatorName,
+		&market.ExpiresAt,
+		&market.PoolYes,
+		&market.PoolNo,
+	)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get market: %w", err)
+	}
+
+	// Get pool totals
+	market.PoolYes, market.PoolNo, err = GetPoolTotals(marketID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &market, nil
 }

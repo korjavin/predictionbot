@@ -55,3 +55,21 @@ type MarketResponse struct {
 	PoolYes     int64  `json:"pool_yes"`
 	PoolNo      int64  `json:"pool_no"`
 }
+
+// Outcome represents a betting outcome
+type Outcome string
+
+const (
+	OutcomeYes Outcome = "YES"
+	OutcomeNo  Outcome = "NO"
+)
+
+// Bet represents a bet placed on a market
+type Bet struct {
+	ID       int64     `json:"id" db:"id"`
+	UserID   int64     `json:"user_id" db:"user_id"`
+	MarketID int64     `json:"market_id" db:"market_id"`
+	Outcome  Outcome   `json:"outcome" db:"outcome"`
+	Amount   int64     `json:"amount" db:"amount"` // in cents
+	PlacedAt time.Time `json:"placed_at" db:"placed_at"`
+}

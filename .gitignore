@@ -1,2 +1,5 @@
 # Data directory (SQLite database)
 data/
+
+# Build artifacts
+bin/
