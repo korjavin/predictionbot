@@ -85,3 +85,15 @@ type LeaderboardEntry struct {
 	Balance        int64  `json:"balance"`
 	BalanceDisplay string `json:"balance_display"`
 }
+
+// BailoutResult represents the result of a bailout operation
+type BailoutResult struct {
+	Message    string `json:"message"`
+	NewBalance int64  `json:"new_balance"`
+}
+
+// BailoutError represents an error response for bailout operations
+type BailoutError struct {
+	Error         string `json:"error"`
+	NextAvailable string `json:"next_available,omitempty"`
+}

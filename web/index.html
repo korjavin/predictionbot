@@ -449,6 +449,22 @@
         .leaderboard-badge {
             font-size: 24px;
         }
+        /* Mortgage Button */
+        .btn-mortgage {
+            background-color: #f59e0b;
+            color: #000000;
+        }
+        .btn-mortgage:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .mortgage-info {
+            font-size: 12px;
+            color: var(--tg-theme-hint-color, #888888);
+            margin-top: -8px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>
@@ -509,6 +525,15 @@
                     <span>Balance</span>
                     <span id="profile-balance">--- WSC</span>
                 </div>
+                
+                <!-- Mortgage Button (shown when balance < 1.00) -->
+                <button id="mortgage-btn" class="btn btn-mortgage" style="display: none;">
+                    💸 Take Mortgage
+                </button>
+                <div id="mortgage-info" class="mortgage-info" style="display: none;">
+                    Get 500.00 WSC free (once per 24h)
+                </div>
+                <div id="mortgage-message"></div>
                 
                 <div class="stats-grid">
                     <div class="stat-card">

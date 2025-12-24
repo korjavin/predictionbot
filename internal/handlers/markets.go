@@ -398,6 +398,24 @@ func HandleAdminResolve(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
+// HandleMarketSubpath routes /api/markets/{id}/resolve and /api/markets/{id}/dispute
+func HandleMarketSubpath(w http.ResponseWriter, r *http.Request) {
+	// Check if path ends with /resolve or /dispute
+	if strings.HasSuffix(r.URL.Path, "/resolve") {
+		HandleMarketResolve(w, r)
+		return
+	}
+	if strings.HasSuffix(r.URL.Path, "/dispute") {
+		HandleDispute(w, r)
+		return
+	}
+	// If neither, return 404
+	logger.Debug(0, "market_subpath_not_found", "path="+r.URL.Path)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	json.NewEncoder(w).Encode(ErrorResponse{Message: "Not found"})
+}
+
 // isAdmin checks if a user is an admin based on ADMIN_USER_IDS environment variable
 func isAdmin(telegramID int64) bool {
 	adminIDs := getAdminIDs()

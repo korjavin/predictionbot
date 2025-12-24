@@ -64,10 +64,11 @@ func main() {
 	apiMux.HandleFunc("/me", handlers.HandleMe)
 	apiMux.HandleFunc("/me/bets", handlers.HandleUserBets)
 	apiMux.HandleFunc("/me/stats", handlers.HandleUserStats)
+	apiMux.HandleFunc("/me/bailout", handlers.HandleBailout)
 	apiMux.HandleFunc("/leaderboard", handlers.HandleLeaderboard)
 	apiMux.HandleFunc("/markets", handlers.HandleMarkets)
-	apiMux.HandleFunc("/markets/", handlers.HandleMarketResolve)     // Handles /markets/{id}/resolve
-	apiMux.HandleFunc("/markets/", handlers.HandleDispute)           // Handles /markets/{id}/dispute
+	// Use a single handler for /markets/{id}/resolve and /markets/{id}/dispute
+	apiMux.HandleFunc("/markets/", handlers.HandleMarketSubpath)
 	apiMux.HandleFunc("/admin/resolve", handlers.HandleAdminResolve) // Handles /api/admin/resolve
 	apiMux.HandleFunc("/bets", handlers.HandleBets)
 

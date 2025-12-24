@@ -82,6 +82,9 @@ async function displayUserProfile() {
             profileUsernameEl.textContent = '';
         }
         
+        // Render mortgage button if balance is low
+        renderMortgageButton();
+        
         // Load initial tab content
         if (currentTab === 'markets') {
             renderMarkets();
@@ -476,6 +479,98 @@ function clearForm() {
     document.getElementById('market-question').value = '';
     document.getElementById('market-deadline').value = '';
     document.getElementById('form-message').innerHTML = '';
+}
+
+// Render mortgage button based on user balance
+function renderMortgageButton() {
+    const mortgageBtn = document.getElementById('mortgage-btn');
+    const mortgageInfo = document.getElementById('mortgage-info');
+    const mortgageMessage = document.getElementById('mortgage-message');
+    
+    if (!mortgageBtn || !currentUser) return;
+    
+    // Show button if balance < 1.00 (100 cents)
+    if (currentUser.balance < 100) {
+        mortgageBtn.style.display = 'block';
+        mortgageInfo.style.display = 'block';
+    } else {
+        mortgageBtn.style.display = 'none';
+        mortgageInfo.style.display = 'none';
+    }
+    
+    // Set up mortgage button click handler
+    mortgageBtn.onclick = handleMortgageClick;
+}
+
+// Handle mortgage button click
+async function handleMortgageClick() {
+    const mortgageBtn = document.getElementById('mortgage-btn');
+    const mortgageMessage = document.getElementById('mortgage-message');
+    
+    mortgageBtn.disabled = true;
+    mortgageBtn.textContent = 'Processing...';
+    mortgageMessage.innerHTML = '';
+    
+    try {
+        const result = await takeMortgage();
+        
+        // Show success message
+        mortgageMessage.innerHTML = `<div class="success-message">${escapeHtml(result.message)}! New balance: ${formatBalance(result.new_balance)} WSC</div>`;
+        
+        // Play success sound (optional)
+        if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.HapticFeedback.notificationOccurred('success');
+        }
+        
+        // Refresh user profile to update balance
+        const user = await fetchUserProfile();
+        currentUser = user;
+        
+        // Update balance displays
+        document.getElementById('user-balance').textContent = formatBalance(user.balance) + ' WSC';
+        document.getElementById('profile-balance').textContent = formatBalance(user.balance) + ' WSC';
+        
+        // Hide mortgage button after successful bailout
+        renderMortgageButton();
+        
+    } catch (error) {
+        // Show error message
+        mortgageMessage.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
+        
+        // Restore button state
+        mortgageBtn.disabled = false;
+        mortgageBtn.textContent = '💸 Take Mortgage';
+        
+        // Haptic feedback for error
+        if (window.Telegram && window.Telegram.WebApp) {
+            window.Telegram.WebApp.HapticFeedback.notificationOccurred('error');
+        }
+    }
+}
+
+// Take mortgage (call bailout API)
+async function takeMortgage() {
+    const response = await fetch('/api/me/bailout', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Telegram-Init-Data': window.Telegram.WebApp.initData
+        }
+    });
+    
+    if (!response.ok) {
+        const error = await response.json();
+        
+        if (error.error === 'cooldown_active') {
+            throw new Error('Bank says NO: ' + (error.next_available || 'Come back later'));
+        }
+        if (error.error === 'balance_too_high') {
+            throw new Error('You have sufficient funds - mortgage not needed!');
+        }
+        throw new Error(error.error || 'Failed to take mortgage');
+    }
+    
+    return response.json();
 }
 
 // Fetch leaderboard from API

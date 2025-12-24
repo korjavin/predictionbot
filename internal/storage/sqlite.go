@@ -13,6 +13,12 @@ import (
 const (
 	// WelcomeBonusAmount is the welcome bonus amount in cents (1000 WSC = 100000 cents)
 	WelcomeBonusAmount int64 = 100000
+	// BailoutAmount is the bailout amount in cents (500 WSC = 50000 cents)
+	BailoutAmount int64 = 50000
+	// BailoutCooldown is the cooldown period for bailouts (24 hours)
+	BailoutCooldown = 24 * time.Hour
+	// BailoutBalanceThreshold is the minimum balance to be eligible for bailout (100 cents = 1.00 WSC)
+	BailoutBalanceThreshold int64 = 100
 )
 
 var db *sql.DB
@@ -771,7 +777,7 @@ func GetUserStats(userID int64) (*UserStats, error) {
 	return stats, nil
 }
 
-    // GetTopUsers returns the top users by balance for the leaderboard
+// GetTopUsers returns the top users by balance for the leaderboard
 func GetTopUsers(limit int) ([]LeaderboardEntry, error) {
 	// Use ROW_NUMBER() for proper ranking
 	rows, err := db.Query(`
@@ -813,4 +819,79 @@ func GetTopUsers(limit int) ([]LeaderboardEntry, error) {
 	}
 
 	return leaderboard, nil
+}
+
+// GetLastBailout returns the timestamp of the last bailout transaction for a user
+// Returns (time.Time{}, false) if no bailout exists
+func GetLastBailout(userID int64) (time.Time, bool, error) {
+	var lastBailout time.Time
+	err := db.QueryRow(`
+		SELECT created_at FROM transactions
+		WHERE user_id = ? AND source_type = 'BAILOUT'
+		ORDER BY created_at DESC LIMIT 1
+	`, userID).Scan(&lastBailout)
+	if err == sql.ErrNoRows {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("failed to get last bailout: %w", err)
+	}
+	return lastBailout, true, nil
+}
+
+// ExecuteBailout executes a bailout transaction for a bankrupt user
+// Sets balance to BailoutAmount (50000 cents = 500 WSC)
+// Returns the new balance or an error
+func ExecuteBailout(userID int64) (int64, error) {
+	tx, err := db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Check current balance
+	var currentBalance int64
+	err = tx.QueryRow(`SELECT balance FROM users WHERE id = ?`, userID).Scan(&currentBalance)
+	if err == sql.ErrNoRows {
+		return 0, fmt.Errorf("user not found")
+	}
+	if err != nil {
+		return 0, fmt.Errorf("failed to get balance: %w", err)
+	}
+
+	// Check if user is eligible (balance < threshold)
+	if currentBalance >= BailoutBalanceThreshold {
+		return 0, fmt.Errorf("balance_too_high: user has sufficient funds")
+	}
+
+	// Check cooldown
+	lastBailout, hasBailout, err := GetLastBailout(userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to check bailout eligibility: %w", err)
+	}
+	if hasBailout && time.Since(lastBailout) < BailoutCooldown {
+		return 0, fmt.Errorf("cooldown_active: last bailout was at %s", lastBailout.Format(time.RFC3339))
+	}
+
+	// Execute bailout: set balance to BailoutAmount
+	// First get current balance, then update
+	_, err = tx.Exec(`UPDATE users SET balance = ? WHERE id = ?`, BailoutAmount, userID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to update balance: %w", err)
+	}
+
+	// Log the bailout transaction
+	_, err = tx.Exec(`
+		INSERT INTO transactions (user_id, amount, source_type, description)
+		VALUES (?, ?, 'BAILOUT', 'Emergency mortgage - free bailout')
+	`, userID, BailoutAmount)
+	if err != nil {
+		return 0, fmt.Errorf("failed to log bailout transaction: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("failed to commit bailout: %w", err)
+	}
+
+	return BailoutAmount, nil
 }
