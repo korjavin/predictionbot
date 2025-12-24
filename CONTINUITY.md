@@ -23,6 +23,7 @@ Task 8: Add Server-Side Debug Logs
 - Task 3: COMPLETED
 - Task 4: COMPLETED
 - Task 5: COMPLETED
+- Task 6: COMPLETED
 - Task 8: COMPLETED
 
 ## Done
@@ -31,10 +32,10 @@ Task 8: Add Server-Side Debug Logs
 - Task 3: Market Creation & Listing
 - Task 4: Betting Engine & Parimutuel Logic
 - Task 5: Market Resolution & Payout Engine
+- Task 6: Dispute Mechanism & Admin Control
 - Task 8: Add Server-Side Debug Logs
 
 ## Now
-- Task 6 (Admin Controls)
 - Task 7 (Bot Market Commands)
 
 ## Next
@@ -60,6 +61,22 @@ Task 8: Add Server-Side Debug Logs
 - Refactored `auth`, `bot`, and `handlers` packages to use `logger.Debug`
 - Ensured consistent log format: `[DEBUG] timestamp=... user_id=... action=... details=...`
 - Removed direct `log.Printf` calls and repetitive timestamp formatting
+
+
+## 2024-12-24 - Dispute Mechanism & Admin Control (Task 6 - COMPLETED)
+- Added `MarketStatusResolved` and `MarketStatusDisputed` status constants
+- Added `Outcome` and `ResolvedAt` fields to Market struct
+- Refactored ResolveMarket() to set RESOLVED status (payouts separate)
+- Added RaiseDispute() for users to dispute resolved markets
+- Added FinalizeMarket() for payout distribution to winners
+- Added GetMarketsPendingFinalization() for auto-finalization queries
+- Added UpdateMarketStatus() helper function
+- Created POST /api/markets/{id}/dispute endpoint (HandleDispute)
+- Created POST /api/admin/resolve endpoint (HandleAdminResolve) with ADMIN_USER_IDS check
+- Added DISPUTE_DELAY_MINUTES env var (default: 24 hours)
+- Updated market_worker.go to auto-finalize after dispute period
+- State Machine: ACTIVE → LOCKED → RESOLVED → (DISPUTED) → FINALIZED
+- Added 8 comprehensive tests in payout_test.go
 
 
 ## 2024-12-24 - Debug Logging Implementation (Task 8)

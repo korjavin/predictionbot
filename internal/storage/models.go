@@ -31,7 +31,8 @@ type MarketStatus string
 const (
 	MarketStatusActive     MarketStatus = "ACTIVE"
 	MarketStatusLocked     MarketStatus = "LOCKED"
-	MarketStatusResolving  MarketStatus = "RESOLVING"
+	MarketStatusResolved   MarketStatus = "RESOLVED"
+	MarketStatusDisputed   MarketStatus = "DISPUTED"
 	MarketStatusFinalized  MarketStatus = "FINALIZED"
 )
 
@@ -42,6 +43,8 @@ type Market struct {
 	Question   string       `json:"question" db:"question"`
 	ImageURL   string       `json:"image_url,omitempty" db:"image_url"`
 	Status     MarketStatus `json:"status" db:"status"`
+	Outcome    string       `json:"outcome,omitempty" db:"outcome"`
+	ResolvedAt time.Time    `json:"resolved_at,omitempty" db:"resolved_at"`
 	ExpiresAt  time.Time    `json:"expires_at" db:"expires_at"`
 	CreatedAt  time.Time    `json:"created_at" db:"created_at"`
 }

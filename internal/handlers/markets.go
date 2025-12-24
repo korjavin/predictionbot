@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -169,8 +170,7 @@ type ResolveMarketRequest struct {
 
 // ResolveMarketResponse is the response for resolving a market
 type ResolveMarketResponse struct {
-	Status           string `json:"status"`
-	PayoutsProcessed int    `json:"payouts_processed"`
+	Status string `json:"status"`
 }
 
 // HandleMarketResolve handles POST /api/markets/{id}/resolve
@@ -224,7 +224,7 @@ func HandleMarketResolve(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the market using the payout service
 	payoutService := service.NewPayoutService()
-	payoutsProcessed, err := payoutService.ResolveMarket(ctx, marketID, userID, req.Outcome)
+	err = payoutService.ResolveMarket(ctx, marketID, userID, req.Outcome)
 	if err != nil {
 		errMsg := err.Error()
 		logger.Debug(userID, "resolve_failed", fmt.Sprintf("market_id=%d error=%s", marketID, errMsg))
@@ -242,12 +242,191 @@ func HandleMarketResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logger.Debug(userID, "resolve_success", fmt.Sprintf("market_id=%d outcome=%s payouts=%d", marketID, req.Outcome, payoutsProcessed))
+	logger.Debug(userID, "resolve_success", fmt.Sprintf("market_id=%d outcome=%s", marketID, req.Outcome))
 	response := ResolveMarketResponse{
+		Status: "resolved",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+// RaiseDisputeRequest is the request body for raising a dispute
+type RaiseDisputeRequest struct {
+	MarketID int64 `json:"market_id"`
+}
+
+// RaiseDisputeResponse is the response for raising a dispute
+type RaiseDisputeResponse struct {
+	Status string `json:"status"`
+}
+
+// HandleDispute handles POST /api/markets/{id}/dispute
+func HandleDispute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		logger.Debug(0, "dispute_invalid_method", "method="+r.Method+" path="+r.URL.Path)
+		respondWithError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get user ID from context
+	ctx := r.Context()
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok {
+		logger.Debug(0, "dispute_unauthorized", "path="+r.URL.Path)
+		respondWithError(w, "Unauthorized: user not in context", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse market ID from URL path
+	// Expected path: /api/markets/{id}/dispute (after StripPrefix removes /api)
+	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+	if len(pathParts) < 3 || pathParts[0] != "markets" || pathParts[2] != "dispute" {
+		logger.Debug(userID, "dispute_invalid_path", "path="+r.URL.Path)
+		respondWithError(w, "Invalid path format", http.StatusBadRequest)
+		return
+	}
+
+	marketID, err := strconv.ParseInt(pathParts[1], 10, 64)
+	if err != nil {
+		logger.Debug(userID, "dispute_invalid_id", "id="+pathParts[1])
+		respondWithError(w, "Invalid market ID", http.StatusBadRequest)
+		return
+	}
+
+	// Raise dispute using the payout service
+	payoutService := service.NewPayoutService()
+	err = payoutService.RaiseDispute(ctx, marketID, userID)
+	if err != nil {
+		errMsg := err.Error()
+		logger.Debug(userID, "dispute_failed", fmt.Sprintf("market_id=%d error=%s", marketID, errMsg))
+		if strings.Contains(errMsg, "not found") {
+			respondWithError(w, errMsg, http.StatusNotFound)
+		} else if strings.Contains(errMsg, "cannot be disputed") {
+			respondWithError(w, errMsg, http.StatusConflict)
+		} else {
+			respondWithError(w, "Failed to dispute market", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	logger.Debug(userID, "dispute_success", fmt.Sprintf("market_id=%d", marketID))
+	response := RaiseDisputeResponse{
+		Status: "disputed",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(response)
+}
+
+// AdminResolveRequest is the request body for admin force resolve
+type AdminResolveRequest struct {
+	MarketID int64  `json:"market_id"`
+	Outcome  string `json:"outcome"`
+}
+
+// AdminResolveResponse is the response for admin force resolve
+type AdminResolveResponse struct {
+	Status           string `json:"status"`
+	PayoutsProcessed int    `json:"payouts_processed"`
+}
+
+// HandleAdminResolve handles POST /api/admin/resolve
+func HandleAdminResolve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		logger.Debug(0, "admin_resolve_invalid_method", "method="+r.Method+" path="+r.URL.Path)
+		respondWithError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get user ID from context
+	ctx := r.Context()
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok {
+		logger.Debug(0, "admin_resolve_unauthorized", "path="+r.URL.Path)
+		respondWithError(w, "Unauthorized: user not in context", http.StatusUnauthorized)
+		return
+	}
+
+	// Parse request body
+	var req AdminResolveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logger.Debug(userID, "admin_resolve_invalid_body", "error="+err.Error())
+		respondWithError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate outcome
+	if req.Outcome != "YES" && req.Outcome != "NO" {
+		logger.Debug(userID, "admin_resolve_invalid_outcome", "outcome="+req.Outcome)
+		respondWithError(w, "Invalid outcome: must be 'YES' or 'NO'", http.StatusBadRequest)
+		return
+	}
+
+	// Check if user is admin
+	if !isAdmin(userID) {
+		logger.Debug(userID, "admin_resolve_not_admin", "user is not an admin")
+		respondWithError(w, "Forbidden: admin access required", http.StatusForbidden)
+		return
+	}
+
+	// Finalize the market using the payout service with force outcome
+	payoutService := service.NewPayoutService()
+	payoutsProcessed, err := payoutService.FinalizeMarket(ctx, req.MarketID, req.Outcome)
+	if err != nil {
+		errMsg := err.Error()
+		logger.Debug(userID, "admin_resolve_failed", fmt.Sprintf("market_id=%d error=%s", req.MarketID, errMsg))
+		if strings.Contains(errMsg, "not found") {
+			respondWithError(w, errMsg, http.StatusNotFound)
+		} else if strings.Contains(errMsg, "cannot be finalized") {
+			respondWithError(w, errMsg, http.StatusConflict)
+		} else if strings.Contains(errMsg, "invalid outcome") {
+			respondWithError(w, errMsg, http.StatusBadRequest)
+		} else {
+			respondWithError(w, "Failed to finalize market", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	logger.Debug(userID, "admin_resolve_success", fmt.Sprintf("market_id=%d outcome=%s payouts=%d", req.MarketID, req.Outcome, payoutsProcessed))
+	response := AdminResolveResponse{
 		Status:           "finalized",
 		PayoutsProcessed: payoutsProcessed,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(response)
+}
+
+// isAdmin checks if a user is an admin based on ADMIN_USER_IDS environment variable
+func isAdmin(telegramID int64) bool {
+	adminIDs := getAdminIDs()
+	for _, id := range adminIDs {
+		if id == telegramID {
+			return true
+		}
+	}
+	return false
+}
+
+// getAdminIDs returns the list of admin user IDs from environment variables
+func getAdminIDs() []int64 {
+	adminIDsEnv := os.Getenv("ADMIN_USER_IDS")
+	if adminIDsEnv == "" {
+		return nil
+	}
+
+	var adminIDs []int64
+	parts := strings.Split(adminIDsEnv, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		var id int64
+		if _, err := fmt.Sscanf(part, "%d", &id); err == nil {
+			adminIDs = append(adminIDs, id)
+		}
+	}
+	return adminIDs
 }

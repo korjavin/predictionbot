@@ -49,7 +49,9 @@ func main() {
 	apiMux.HandleFunc("/ping", handlers.PingHandler)
 	apiMux.HandleFunc("/me", handlers.HandleMe)
 	apiMux.HandleFunc("/markets", handlers.HandleMarkets)
-	apiMux.HandleFunc("/markets/", handlers.HandleMarketResolve) // Handles /markets/{id}/resolve
+	apiMux.HandleFunc("/markets/", handlers.HandleMarketResolve)   // Handles /markets/{id}/resolve
+	apiMux.HandleFunc("/markets/", handlers.HandleDispute)        // Handles /markets/{id}/dispute
+	apiMux.HandleFunc("/admin/resolve", handlers.HandleAdminResolve) // Handles /api/admin/resolve
 	apiMux.HandleFunc("/bets", handlers.HandleBets)
 
 	// Apply auth middleware to API routes (except ping for testing)

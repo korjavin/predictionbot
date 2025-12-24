@@ -289,16 +289,21 @@ func CreateMarket(creatorID int64, question string, expiresAt time.Time) (*Marke
 // GetMarketByID retrieves a market by its ID
 func GetMarketByID(id int64) (*Market, error) {
 	var market Market
+	var imageURL sql.NullString
+	var outcome sql.NullString
+	var resolvedAt sql.NullTime
 	err := db.QueryRow(`
-		SELECT id, creator_id, question, image_url, status, expires_at, created_at
+		SELECT id, creator_id, question, image_url, status, outcome, resolved_at, expires_at, created_at
 		FROM markets
 		WHERE id = ?
 	`, id).Scan(
 		&market.ID,
 		&market.CreatorID,
 		&market.Question,
-		&market.ImageURL,
+		&imageURL,
 		&market.Status,
+		&outcome,
+		&resolvedAt,
 		&market.ExpiresAt,
 		&market.CreatedAt,
 	)
@@ -308,6 +313,18 @@ func GetMarketByID(id int64) (*Market, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get market by id: %w", err)
 	}
+
+	// Handle NULL values
+	if imageURL.Valid {
+		market.ImageURL = imageURL.String
+	}
+	if outcome.Valid {
+		market.Outcome = outcome.String
+	}
+	if resolvedAt.Valid {
+		market.ResolvedAt = resolvedAt.Time
+	}
+
 	return &market, nil
 }
 
@@ -532,4 +549,53 @@ func GetMarketWithPools(marketID int64) (*MarketWithCreator, error) {
 	}
 
 	return &market, nil
+}
+
+// UpdateMarketStatus updates the status and optionally the outcome of a market
+func UpdateMarketStatus(marketID int64, status MarketStatus, outcome string) error {
+	var query string
+	var args []interface{}
+
+	if outcome != "" {
+		query = `UPDATE markets SET status = ?, outcome = ?, resolved_at = CURRENT_TIMESTAMP WHERE id = ?`
+		args = []interface{}{status, outcome, marketID}
+	} else {
+		query = `UPDATE markets SET status = ? WHERE id = ?`
+		args = []interface{}{status, marketID}
+	}
+
+	_, err := db.Exec(query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update market status: %w", err)
+	}
+	return nil
+}
+
+// GetMarketsPendingFinalization returns markets that are resolved and ready for auto-finalization
+// These are markets where resolved_at is older than the threshold duration
+func GetMarketsPendingFinalization(threshold time.Duration) ([]int64, error) {
+	rows, err := db.Query(`
+		SELECT id FROM markets
+		WHERE status = 'RESOLVED'
+		AND resolved_at < datetime('now', '-' || ? || ' seconds')
+	`, int64(threshold.Seconds()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to query pending markets: %w", err)
+	}
+	defer rows.Close()
+
+	var marketIDs []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan market id: %w", err)
+		}
+		marketIDs = append(marketIDs, id)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating markets: %w", err)
+	}
+
+	return marketIDs, nil
 }
