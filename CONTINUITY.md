@@ -150,3 +150,31 @@ Task 10: Public News Channel (Broadcasting) - IN PROGRESS
 **Result:**
 - Betting now works end-to-end
 - Correct user balance deducted and pool totals updated
+
+## 2024-12-24 - Balance System Normalization
+### Problem
+- Display showed 100x more on balance and bets compared to leaderboard
+- System was using "cents" (balance 100000 = 1000.00 displayed)
+- User wanted simple integers: balance 1000, bet 50 = balance 950
+
+### Changes Applied
+**Backend constants (internal/storage/sqlite.go):**
+- WelcomeBonusAmount: 100000 → 1000
+- BailoutAmount: 50000 → 500
+- BailoutBalanceThreshold: 100 → 1
+
+**Backend display logic:**
+- internal/handlers/me.go: Removed `/100.0` division in balanceDisplay
+- internal/storage/sqlite.go: Removed `/100` in leaderboard BalanceDisplay
+- internal/bot/bot.go: Updated formatBalance() to show integers
+- internal/service/notification.go: Updated formatBalance() to show integers
+- internal/storage/models.go: Removed "in cents" comments
+
+**Frontend (web/app.js):**
+- Removed `/100` in profit calculation (line 201)
+- Changed bailout threshold from `< 100` to `< 1` (line 533)
+
+**Result:**
+- Consistent integer display across all views
+- New users start with balance 1000 (not 100000)
+- Bailout gives 500 when balance < 1
