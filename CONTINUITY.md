@@ -39,17 +39,12 @@ API Test Suite for Safe Refactoring - COMPLETED
 - API Test Suite: 55 tests covering all 12 endpoints
 
 ## Now
-- Frontend owner controls available for resolving markets
-- DM notifications sent to market owners when deadline passes
-- Bot commands: /resolve_yes, /resolve_no, /mymarkets
-- Channel notifications automatically sent when markets are resolved (if CHANNEL_ID configured)
-- Ready to resolve today's deadline markets
+- Fixing bug in /list command: pool amounts always show 0
 
 ## Next
-- Resolve today's deadline markets
+- Test fix in production
 - Monitor notification delivery
 - Consider adding more owner management features
-- Expand test coverage for new functionality
 
 ## Open questions
 - None

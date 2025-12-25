@@ -396,10 +396,13 @@ type MarketWithCreator struct {
 func ListActiveMarketsWithCreator() ([]MarketWithCreator, error) {
 	rows, err := db.Query(`
 		SELECT m.id, m.question, COALESCE(NULLIF(u.first_name, ''), 'Anonymous'), m.expires_at,
-		       0, 0
+		       COALESCE(SUM(CASE WHEN b.outcome = 'YES' THEN b.amount ELSE 0 END), 0) as pool_yes,
+		       COALESCE(SUM(CASE WHEN b.outcome = 'NO' THEN b.amount ELSE 0 END), 0) as pool_no
 		FROM markets m
 		LEFT JOIN users u ON m.creator_id = u.id
+		LEFT JOIN bets b ON m.id = b.market_id
 		WHERE m.status = 'ACTIVE'
+		GROUP BY m.id, m.question, u.first_name, m.expires_at, m.created_at
 		ORDER BY m.created_at DESC
 	`)
 	if err != nil {
