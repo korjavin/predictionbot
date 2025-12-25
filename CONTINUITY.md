@@ -39,13 +39,13 @@ API Test Suite for Safe Refactoring - COMPLETED
 - API Test Suite: 55 tests covering all 12 endpoints
 
 ## Now
-- Deployed fix for /list command pool amounts bug
+- Fixed Markdown escaping in /list command (removed excess backslashes)
 - System ready for production use
 
 ## Next
-- Monitor /list command in production
+- Deploy fixes to production
+- Monitor /list command display
 - Monitor notification delivery
-- Consider adding more owner management features
 
 ## Open questions
 - None
@@ -383,3 +383,31 @@ Added 55 tests covering all 12 API endpoints for safe refactoring:
 - `/list` command now shows actual pool totals for YES and NO bets
 - All storage tests passing
 - Changes deployed to production via git push
+## 2024-12-25 - Bug Fix: /list Command Shows Escaped Characters (Backslashes)
+### Problem
+- Telegram command `/list` displayed market titles with excessive backslash escaping
+- Example: "Will we sell 1 item on ebay from now until next\.\.\."
+- All dots, dashes, and other punctuation were escaped with backslashes
+
+### Root Cause
+- In [internal/bot/bot.go:23-42](internal/bot/bot.go#L23-L42), `escapeMarkdown()` function was escaping ALL special characters
+- Function was written for **MarkdownV2** mode (requires escaping . ! - + = | etc.)
+- But code uses legacy **Markdown** mode (`telebot.ModeMarkdown`)
+- Legacy Markdown only requires escaping: `*`, `_`, `` ` ``, `[`
+
+### Fix Applied
+**Backend (internal/bot/bot.go):**
+- Simplified `escapeMarkdown()` to only escape characters needed for legacy Markdown:
+  ```go
+  // Only escape *, _, `, [
+  escaped = strings.ReplaceAll(escaped, "*", `\*`)
+  escaped = strings.ReplaceAll(escaped, "_", `\_`)
+  escaped = strings.ReplaceAll(escaped, "`", "\\`")
+  escaped = strings.ReplaceAll(escaped, "[", `\[`)
+  ```
+- Removed unnecessary escaping of: `.`, `!`, `-`, `+`, `=`, `|`, `>`, `#`, `(`, `)`, `]`, `\`
+
+**Result:**
+- Market titles now display normally without backslashes
+- "Will we sell 1 item on ebay from now until next..." (no escaping)
+- All other bot commands benefit from cleaner text display

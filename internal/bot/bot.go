@@ -20,25 +20,14 @@ func formatBalance(balance int64) string {
 	return fmt.Sprintf("%d WSC", balance)
 }
 
-// escapeMarkdown escapes special characters for Telegram Markdown mode
+// escapeMarkdown escapes special characters for Telegram Markdown mode (legacy)
+// For legacy Markdown, only *, _, `, and [ need to be escaped
 func escapeMarkdown(s string) string {
 	escaped := s
-	escaped = strings.ReplaceAll(escaped, `\`, `\\`)
 	escaped = strings.ReplaceAll(escaped, "*", `\*`)
 	escaped = strings.ReplaceAll(escaped, "_", `\_`)
-	escaped = strings.ReplaceAll(escaped, "`", `\`)
+	escaped = strings.ReplaceAll(escaped, "`", "\\`")
 	escaped = strings.ReplaceAll(escaped, "[", `\[`)
-	escaped = strings.ReplaceAll(escaped, "]", `\]`)
-	escaped = strings.ReplaceAll(escaped, "(", `\(`)
-	escaped = strings.ReplaceAll(escaped, ")", `\)`)
-	escaped = strings.ReplaceAll(escaped, ">", `\>`)
-	escaped = strings.ReplaceAll(escaped, "#", `\#`)
-	escaped = strings.ReplaceAll(escaped, "+", `\+`)
-	escaped = strings.ReplaceAll(escaped, "-", `\-`)
-	escaped = strings.ReplaceAll(escaped, "=", `\=`)
-	escaped = strings.ReplaceAll(escaped, "|", `\|`)
-	escaped = strings.ReplaceAll(escaped, ".", `\.`)
-	escaped = strings.ReplaceAll(escaped, "!", `\!`)
 	return escaped
 }
 
