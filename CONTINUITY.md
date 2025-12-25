@@ -39,13 +39,13 @@ API Test Suite for Safe Refactoring - COMPLETED
 - API Test Suite: 55 tests covering all 12 endpoints
 
 ## Now
-- Fixed callback Data vs Unique field confusion (third iteration)
-- Deployed to production - buttons should now work
+- ✅ /resolve buttons fully working
+- ✅ Channel broadcast confirmed working
+- ✅ All resolution features operational
 
 ## Next
-- User to test /resolve button clicks
-- Verify logs show callback_resolve_start and market_resolved
-- Confirm payouts are distributed correctly
+- Monitor dispute period and auto-finalization
+- Continue with regular operation
 
 ## Open questions
 - None
@@ -495,3 +495,41 @@ callback_ignored details=not a resolve callback:
 - Market ID and outcome correctly parsed
 - Resolution executes and payouts distributed
 - Logs should now show: callback_resolve_start, market_resolved
+
+## 2024-12-25 - Resolution: All Features Working
+### Final Status
+After multiple iterations fixing callback handlers, all features are now operational:
+
+**✅ What Works:**
+1. `/resolve` command shows interactive button interface
+2. Button clicks properly trigger callbacks (Data field fix)
+3. Market resolution executes correctly
+4. Channel broadcast sends notifications to public channel
+5. Detailed logging shows full execution flow
+
+**Production Test Results:**
+```
+callback_received → callback_resolve_start → market_resolved
+→ broadcast_resolution_attempt → broadcast_message_prepared → broadcast_resolution
+Successfully published resolution for market #1 to channel -4684278616
+```
+
+**Channel Message Confirmed:**
+```
+🏁 Market Resolved
+#1 Vitalii does dishes 25/12 without whipping
+❌ Outcome: NO
+💰 Total Pool: 605 WSC
+Congratulations to the winners!
+```
+
+### Key Learnings
+1. **Unique vs Data:** `Unique` is for handler registration, `Data` is for callback payload
+2. **OnCallback Handler:** Must be registered once at bot startup, not dynamically
+3. **Logging is Critical:** Added detailed logs to diagnose broadcast issues
+4. **Database Access:** Can reset market status via SSH for testing
+
+### Files Modified (Final State)
+- [internal/bot/bot.go:650-726](internal/bot/bot.go#L650-L726) - OnCallback handler reading Data field
+- [internal/bot/bot.go:480-487](internal/bot/bot.go#L480-L487) - Buttons using Data field
+- [internal/service/notification.go:260-301](internal/service/notification.go#L260-L301) - Enhanced broadcast logging
