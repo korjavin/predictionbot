@@ -18,6 +18,7 @@ services:
       - WEB_APP_URL=${WEB_APP_URL}
       - PORT=8080
       - CHANNEL_ID=${CHANNEL_ID}
+      - ADMIN_TELEGRAM_ID=${ADMIN_TELEGRAM_ID}
     volumes:
       - ./data:/app/data
     restart: unless-stopped
