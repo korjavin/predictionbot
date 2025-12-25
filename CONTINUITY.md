@@ -39,13 +39,13 @@ API Test Suite for Safe Refactoring - COMPLETED
 - API Test Suite: 55 tests covering all 12 endpoints
 
 ## Now
-- Fixed /resolve callback button handling (buttons now work correctly)
-- System ready for production use
+- Fixed /resolve callback with universal OnCallback handler and debug logging
+- Deployed fix to production (awaiting user testing)
 
 ## Next
-- Deploy /resolve fix to production
-- Monitor market resolution via buttons
-- Monitor notification delivery
+- Monitor callback logs on production server
+- Verify button clicks are now processed
+- Check for callback_received and market_resolved logs
 
 ## Open questions
 - None

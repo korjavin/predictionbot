@@ -476,14 +476,14 @@ func StartBot() {
 			}
 
 			// Create YES and NO buttons for each market
-			// Use Unique field with prefix for pattern matching
+			// Use Data field for callback data (Unique is for handler registration only)
 			yesButton := telebot.InlineButton{
-				Text:   fmt.Sprintf("✅ #%d %s", market.ID, question),
-				Unique: fmt.Sprintf("resolve_%d_yes", market.ID),
+				Text: fmt.Sprintf("✅ #%d %s", market.ID, question),
+				Data: fmt.Sprintf("resolve_%d_yes", market.ID),
 			}
 			noButton := telebot.InlineButton{
-				Text:   fmt.Sprintf("🔴 #%d %s", market.ID, question),
-				Unique: fmt.Sprintf("resolve_%d_no", market.ID),
+				Text: fmt.Sprintf("🔴 #%d %s", market.ID, question),
+				Data: fmt.Sprintf("resolve_%d_no", market.ID),
 			}
 
 			keyboard = append(keyboard, []telebot.InlineButton{yesButton, noButton})
@@ -587,18 +587,20 @@ func StartBot() {
 		telegramID := c.Sender().ID
 		callback := c.Callback()
 
-		logger.Debug(telegramID, "callback_received", fmt.Sprintf("unique=%s data=%s", callback.Unique, callback.Data))
+		// Telebot uses Data field for inline button callbacks, not Unique
+		callbackData := callback.Data
+		logger.Debug(telegramID, "callback_received", fmt.Sprintf("unique=%s data=%s", callback.Unique, callbackData))
 
 		// Check if this is a resolution callback
-		if !strings.HasPrefix(callback.Unique, "resolve_") {
-			logger.Debug(telegramID, "callback_ignored", fmt.Sprintf("not a resolve callback: %s", callback.Unique))
+		if !strings.HasPrefix(callbackData, "resolve_") {
+			logger.Debug(telegramID, "callback_ignored", fmt.Sprintf("not a resolve callback: %s", callbackData))
 			return nil // Not our callback, ignore
 		}
 
 		// Parse callback: resolve_{marketID}_{outcome}
-		parts := strings.Split(callback.Unique, "_")
+		parts := strings.Split(callbackData, "_")
 		if len(parts) != 3 {
-			logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid format: %s", callback.Unique))
+			logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid format: %s", callbackData))
 			return c.Respond(&telebot.CallbackResponse{Text: "❌ Invalid button format"})
 		}
 
