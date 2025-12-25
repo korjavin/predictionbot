@@ -51,7 +51,7 @@ func HandleMarkets(w http.ResponseWriter, r *http.Request) {
 func handleCreateMarket(w http.ResponseWriter, r *http.Request) {
 	// Get user ID from context
 	ctx := r.Context()
-	userID, ok := auth.GetUserIDFromContext(ctx)
+	telegramID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
 		logger.Debug(0, "markets_create_unauthorized", "path="+r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
@@ -60,10 +60,20 @@ func handleCreateMarket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get user by Telegram ID to retrieve internal user ID
+	user, err := storage.GetUserByTelegramID(telegramID)
+	if err != nil || user == nil {
+		logger.Debug(telegramID, "markets_create_user_not_found", "error=user lookup failed")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorResponse{Message: "User not found"})
+		return
+	}
+
 	// Decode request body
 	var req CreateMarketRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		logger.Debug(userID, "markets_create_invalid_body", "error="+err.Error())
+		logger.Debug(telegramID, "markets_create_invalid_body", "error="+err.Error())
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Message: "Invalid request body"})
@@ -72,7 +82,7 @@ func handleCreateMarket(w http.ResponseWriter, r *http.Request) {
 
 	// Validate question length (10-140 chars)
 	if len(req.Question) < 10 || len(req.Question) > 140 {
-		logger.Debug(userID, "markets_create_validation_failed", "question_length_invalid")
+		logger.Debug(telegramID, "markets_create_validation_failed", "question_length_invalid")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Message: "Question must be between 10 and 140 characters"})
@@ -82,7 +92,7 @@ func handleCreateMarket(w http.ResponseWriter, r *http.Request) {
 	// Parse expires_at
 	expiresAt, err := time.Parse(time.RFC3339, req.ExpiresAt)
 	if err != nil {
-		logger.Debug(userID, "markets_create_invalid_expiry", "expires_at="+req.ExpiresAt+" error="+err.Error())
+		logger.Debug(telegramID, "markets_create_invalid_expiry", "expires_at="+req.ExpiresAt+" error="+err.Error())
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Message: "Invalid expires_at format. Use RFC3339 format (e.g., 2024-01-01T00:00:00Z)"})
@@ -92,21 +102,21 @@ func handleCreateMarket(w http.ResponseWriter, r *http.Request) {
 	// Validate that expires_at is at least 1 hour in the future
 	minExpiry := time.Now().Add(1 * time.Hour)
 	if expiresAt.Before(minExpiry) {
-		logger.Debug(userID, "markets_create_expiry_too_early", "expires_at="+req.ExpiresAt+" min_expiry="+minExpiry.Format(time.RFC3339))
+		logger.Debug(telegramID, "markets_create_expiry_too_early", "expires_at="+req.ExpiresAt+" min_expiry="+minExpiry.Format(time.RFC3339))
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(ErrorResponse{Message: "Expiration must be at least 1 hour from now"})
 		return
 	}
 
-	// Create the market
-	market, err := storage.CreateMarket(userID, req.Question, expiresAt)
+	// Create the market using internal user ID
+	market, err := storage.CreateMarket(user.ID, req.Question, expiresAt)
 	if err != nil {
 		questionPreview := req.Question
 		if len(questionPreview) > 50 {
 			questionPreview = questionPreview[:50]
 		}
-		logger.Debug(userID, "markets_create_failed", "question="+questionPreview+" error="+err.Error())
+		logger.Debug(telegramID, "markets_create_failed", "question="+questionPreview+" error="+err.Error())
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(ErrorResponse{Message: "Failed to create market"})
@@ -117,15 +127,12 @@ func handleCreateMarket(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		notificationService := service.GetNotificationService()
 		if notificationService != nil {
-			// Get creator name
-			user, err := storage.GetUserByID(userID)
+			// Use creator name from already-fetched user
 			creatorName := "Anonymous"
-			if err == nil && user != nil {
-				if user.Username != "" {
-					creatorName = "@" + user.Username
-				} else {
-					creatorName = user.FirstName
-				}
+			if user.Username != "" {
+				creatorName = "@" + user.Username
+			} else {
+				creatorName = user.FirstName
 			}
 			notificationService.PublishNewMarket(market, creatorName)
 		}
@@ -135,7 +142,7 @@ func handleCreateMarket(w http.ResponseWriter, r *http.Request) {
 	if len(questionPreview) > 50 {
 		questionPreview = questionPreview[:50]
 	}
-	logger.Debug(userID, "market_created", fmt.Sprintf("market_id=%d question=%s expires_at=%s", market.ID, questionPreview, expiresAt.Format(time.RFC3339)))
+	logger.Debug(telegramID, "market_created", fmt.Sprintf("market_id=%d question=%s expires_at=%s", market.ID, questionPreview, expiresAt.Format(time.RFC3339)))
 	response := CreateMarketResponse{
 		ID:     market.ID,
 		Status: string(market.Status),
