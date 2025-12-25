@@ -39,12 +39,12 @@ API Test Suite for Safe Refactoring - COMPLETED
 - API Test Suite: 55 tests covering all 12 endpoints
 
 ## Now
-- Fixed Markdown escaping in /list command (removed excess backslashes)
+- Fixed /resolve callback button handling (buttons now work correctly)
 - System ready for production use
 
 ## Next
-- Deploy fixes to production
-- Monitor /list command display
+- Deploy /resolve fix to production
+- Monitor market resolution via buttons
 - Monitor notification delivery
 
 ## Open questions
@@ -411,3 +411,46 @@ Added 55 tests covering all 12 API endpoints for safe refactoring:
 - Market titles now display normally without backslashes
 - "Will we sell 1 item on ebay from now until next..." (no escaping)
 - All other bot commands benefit from cleaner text display
+
+## 2024-12-25 - Bug Fix: /resolve Command Buttons Not Working
+### Problem
+- User received deadline notification with outdated commands `/resolveyes` (deprecated)
+- Fixed notification to show `/resolve` command instead
+- When using `/resolve` command, buttons displayed correctly but clicking them produced no response
+- No market resolution, no payouts, no messages - buttons were completely non-functional
+
+### Root Cause
+- In [internal/bot/bot.go:479-490](internal/bot/bot.go#L479-L490), inline buttons were created with `Unique` field containing dynamic market IDs:
+  ```go
+  Unique: fmt.Sprintf("resolve_yes_%d", market.ID)  // e.g., "resolve_yes_5"
+  ```
+- Handler registration used static prefix without wildcard support:
+  ```go
+  b.Handle(&telebot.InlineButton{Unique: "resolve_yes_"}, ...)
+  ```
+- Telebot requires exact match between button `Unique` and handler registration
+- Handlers were registered with prefix `"resolve_yes_"` but buttons had full IDs like `"resolve_yes_5"`
+- No match = no callback execution = silent failure
+
+### Fix Applied
+**Backend (internal/bot/bot.go):**
+1. Changed button creation to use `Data` field instead of `Unique`:
+   ```go
+   yesButton := telebot.InlineButton{
+       Text: fmt.Sprintf("✅ #%d %s", market.ID, question),
+       Data: fmt.Sprintf("resolve_yes_%d", market.ID),
+   }
+   ```
+2. Moved handler registration inside `/resolve` command to register each button individually:
+   ```go
+   b.Handle(&yesButton, resolveCallbackHandler("YES", b))
+   b.Handle(&noButton, resolveCallbackHandler("NO", b))
+   ```
+3. Extracted `resolveCallbackHandler` as a separate function before `StartBot()`
+4. Handler now reads `c.Callback().Data` instead of `c.Callback().Unique`
+
+**Result:**
+- Buttons now properly trigger callback handlers
+- Market resolution via buttons works end-to-end
+- Payouts distributed correctly after button click
+- Confirmation message shows resolved outcome
