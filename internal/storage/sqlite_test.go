@@ -195,7 +195,7 @@ func TestPlaceBet(t *testing.T) {
 	market, _ := CreateMarket(user.ID, "Bet test market?", expiresAt)
 
 	ctx := context.Background()
-	err := PlaceBet(ctx, user.ID, market.ID, "YES", 10000)
+	err := PlaceBet(ctx, user.ID, market.ID, "YES", 100)
 	if err != nil {
 		t.Fatalf("PlaceBet failed: %v", err)
 	}
@@ -205,8 +205,8 @@ func TestPlaceBet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPoolTotals failed: %v", err)
 	}
-	if poolYes != 10000 {
-		t.Errorf("Expected YES pool 10000, got %d", poolYes)
+	if poolYes != 100 {
+		t.Errorf("Expected YES pool 100, got %d", poolYes)
 	}
 }
 
@@ -251,19 +251,19 @@ func TestGetPoolTotals(t *testing.T) {
 	market, _ := CreateMarket(user.ID, "Pool test market?", expiresAt)
 
 	ctx := context.Background()
-	// Place bets on both outcomes
-	_ = PlaceBet(ctx, user.ID, market.ID, "YES", 10000)
-	_ = PlaceBet(ctx, user.ID, market.ID, "NO", 15000)
+	// Place bets on both outcomes (total 500, within 1000 welcome bonus)
+	_ = PlaceBet(ctx, user.ID, market.ID, "YES", 200)
+	_ = PlaceBet(ctx, user.ID, market.ID, "NO", 300)
 
 	poolYes, poolNo, err := GetPoolTotals(market.ID)
 	if err != nil {
 		t.Fatalf("GetPoolTotals failed: %v", err)
 	}
-	if poolYes != 10000 {
-		t.Errorf("Expected YES pool 10000, got %d", poolYes)
+	if poolYes != 200 {
+		t.Errorf("Expected YES pool 200, got %d", poolYes)
 	}
-	if poolNo != 15000 {
-		t.Errorf("Expected NO pool 15000, got %d", poolNo)
+	if poolNo != 300 {
+		t.Errorf("Expected NO pool 300, got %d", poolNo)
 	}
 }
 
@@ -300,8 +300,9 @@ func TestGetUserBets(t *testing.T) {
 	market2, _ := CreateMarket(user.ID, "Market 2", expiresAt)
 
 	ctx := context.Background()
-	_ = PlaceBet(ctx, user.ID, market1.ID, "YES", 10000)
-	_ = PlaceBet(ctx, user.ID, market2.ID, "NO", 20000)
+	// Place bets within welcome bonus balance (total 400)
+	_ = PlaceBet(ctx, user.ID, market1.ID, "YES", 200)
+	_ = PlaceBet(ctx, user.ID, market2.ID, "NO", 200)
 
 	bets, err := GetUserBets(user.ID)
 	if err != nil {
@@ -321,7 +322,7 @@ func TestGetUserStats(t *testing.T) {
 	market, _ := CreateMarket(user.ID, "Stats market", expiresAt)
 
 	ctx := context.Background()
-	_ = PlaceBet(ctx, user.ID, market.ID, "YES", 10000)
+	_ = PlaceBet(ctx, user.ID, market.ID, "YES", 100)
 
 	stats, err := GetUserStats(user.ID)
 	if err != nil {
@@ -330,8 +331,8 @@ func TestGetUserStats(t *testing.T) {
 	if stats.TotalBets != 1 {
 		t.Errorf("Expected 1 total bet, got %d", stats.TotalBets)
 	}
-	if stats.TotalWager != 10000 {
-		t.Errorf("Expected 10000 total wager, got %d", stats.TotalWager)
+	if stats.TotalWager != 100 {
+		t.Errorf("Expected 100 total wager, got %d", stats.TotalWager)
 	}
 }
 
@@ -415,8 +416,8 @@ func TestGetMarketWithPools(t *testing.T) {
 	market, _ := CreateMarket(user.ID, "Market with pools", expiresAt)
 
 	ctx := context.Background()
-	_ = PlaceBet(ctx, user.ID, market.ID, "YES", 5000)
-	_ = PlaceBet(ctx, user.ID, market.ID, "NO", 3000)
+	_ = PlaceBet(ctx, user.ID, market.ID, "YES", 400)
+	_ = PlaceBet(ctx, user.ID, market.ID, "NO", 300)
 
 	marketWithPools, err := GetMarketWithPools(market.ID)
 	if err != nil {
@@ -425,10 +426,10 @@ func TestGetMarketWithPools(t *testing.T) {
 	if marketWithPools == nil {
 		t.Fatal("Expected market with pools, got nil")
 	}
-	if marketWithPools.PoolYes != 5000 {
-		t.Errorf("Expected poolYes 5000, got %d", marketWithPools.PoolYes)
+	if marketWithPools.PoolYes != 400 {
+		t.Errorf("Expected poolYes 400, got %d", marketWithPools.PoolYes)
 	}
-	if marketWithPools.PoolNo != 3000 {
-		t.Errorf("Expected poolNo 3000, got %d", marketWithPools.PoolNo)
+	if marketWithPools.PoolNo != 300 {
+		t.Errorf("Expected poolNo 300, got %d", marketWithPools.PoolNo)
 	}
 }

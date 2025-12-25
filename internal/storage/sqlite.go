@@ -628,6 +628,7 @@ const (
 
 // BetHistoryItem represents a single bet in the user's history
 type BetHistoryItem struct {
+	ID            int64     `json:"id"`
 	MarketID      int64     `json:"market_id"`
 	Question      string    `json:"question"`
 	OutcomeChosen string    `json:"outcome_chosen"`
@@ -658,7 +659,7 @@ func GetUserBets(userID int64) ([]BetHistoryItem, error) {
 		var marketStatus, marketOutcome sql.NullString
 		var placedAt time.Time
 
-		err := rows.Scan(&b.MarketID, &b.MarketID, &b.Question, &b.OutcomeChosen, &b.Amount, &placedAt, &marketStatus, &marketOutcome)
+		err := rows.Scan(&b.ID, &b.MarketID, &b.Question, &b.OutcomeChosen, &b.Amount, &placedAt, &marketStatus, &marketOutcome)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan bet: %w", err)
 		}

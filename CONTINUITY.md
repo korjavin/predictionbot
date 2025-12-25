@@ -189,3 +189,25 @@ Task 10: Public News Channel (Broadcasting) - IN PROGRESS
   - `UPDATE transactions SET amount = amount / 100;`
 - Stopped container, copied migrated DB back, restarted
 - Verified: 4 existing users now have correct balances (990, 750, 985, 1000)
+
+## 2024-12-25 - Bug Fix: Bet History "Failed to load"
+### Problem
+- Profile page showed "Failed to load bet history" in My Betting History section
+- No data was displayed despite having placed bets
+
+### Root Cause
+- In internal/storage/sqlite.go:661, the SQL scan statement had a duplicate `&b.MarketID`
+- The SELECT query returns 8 columns including `b.id`, but only 7 destinations were provided
+- The first column `b.id` was incorrectly scanned into `&b.MarketID`, causing a type mismatch error that silently failed
+
+### Fix Applied
+**Backend (internal/storage/sqlite.go):**
+- Added `ID int64` field to `BetHistoryItem` struct (line 631)
+- Fixed the Scan statement to properly map all 8 columns:
+  ```go
+  err := rows.Scan(&b.ID, &b.MarketID, &b.Question, &b.OutcomeChosen, &b.Amount, &placedAt, &marketStatus, &marketOutcome)
+  ```
+
+**Result:**
+- Bet history now loads correctly on the profile page
+- All storage tests pass
