@@ -261,11 +261,15 @@ func (s *NotificationService) PublishNewMarket(market *storage.Market, creatorNa
 func (s *NotificationService) PublishResolution(marketID int64, question string, outcome string, totalPool int64) {
 	if s.channelID == "" {
 		// Channel not configured, skip broadcasting
+		logger.Debug(0, "broadcast_skipped", "CHANNEL_ID not configured")
+		log.Printf("CHANNEL_ID not configured, skipping broadcast for market #%d", marketID)
 		return
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	logger.Debug(0, "broadcast_resolution_attempt", fmt.Sprintf("channel=%s market_id=%d outcome=%s pool=%d", s.channelID, marketID, outcome, totalPool))
 
 	// Format outcome emoji
 	outcomeEmoji := "✅"
@@ -280,16 +284,19 @@ func (s *NotificationService) PublishResolution(marketID int64, question string,
 		outcome,
 		formatBalance(totalPool))
 
+	logger.Debug(0, "broadcast_message_prepared", fmt.Sprintf("length=%d", len(message)))
+
 	// Send to channel
 	recipient := s.getChannelRecipient()
 	_, err := s.bot.Send(recipient, message, &telebot.SendOptions{
 		ParseMode: telebot.ModeMarkdown,
 	})
 	if err != nil {
-		logger.Debug(0, "broadcast_error", fmt.Sprintf("failed to publish resolution: %v", err))
+		logger.Debug(0, "broadcast_error", fmt.Sprintf("channel=%s error=%v", s.channelID, err))
 		log.Printf("Failed to publish resolution to channel %s: %v", s.channelID, err)
 	} else {
-		logger.Debug(0, "broadcast_resolution", fmt.Sprintf("market_id=%d outcome=%s", marketID, outcome))
+		logger.Debug(0, "broadcast_resolution", fmt.Sprintf("market_id=%d outcome=%s channel=%s", marketID, outcome, s.channelID))
+		log.Printf("Successfully published resolution for market #%d to channel %s", marketID, s.channelID)
 	}
 }
 
