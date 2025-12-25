@@ -102,17 +102,22 @@ func (s *PayoutService) RaiseDispute(ctx context.Context, marketID, userID int64
 	// Validate that the market exists and is in RESOLVED status
 	var currentStatus string
 	var question string
-	var outcome string
+	var outcomeNullable sql.NullString
 	err := db.QueryRowContext(ctx, `
 		SELECT status, question, outcome
 		FROM markets
 		WHERE id = ?
-	`, marketID).Scan(&currentStatus, &question, &outcome)
+	`, marketID).Scan(&currentStatus, &question, &outcomeNullable)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("market not found")
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get market: %w", err)
+	}
+
+	outcome := ""
+	if outcomeNullable.Valid {
+		outcome = outcomeNullable.String
 	}
 
 	// Market must be in RESOLVED status to be disputed
