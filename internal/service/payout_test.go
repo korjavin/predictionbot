@@ -180,8 +180,8 @@ func TestFinalizeMarket(t *testing.T) {
 	market, _ := storage.CreateMarket(creator.ID, "Will it rain tomorrow?", expiresAt)
 
 	// Place bets WHILE market is ACTIVE (before locking)
-	_ = storage.PlaceBet(ctx, winner.ID, market.ID, "YES", 10000) // 100.00 on YES
-	_ = storage.PlaceBet(ctx, loser.ID, market.ID, "NO", 10000)   // 100.00 on NO
+	_ = storage.PlaceBet(ctx, winner.ID, market.ID, "YES", 1000) // 1000 on YES
+	_ = storage.PlaceBet(ctx, loser.ID, market.ID, "NO", 1000)   // 1000 on NO
 
 	// Now lock and resolve the market
 	storage.UpdateMarketStatus(market.ID, storage.MarketStatusLocked, "")
@@ -205,9 +205,9 @@ func TestFinalizeMarket(t *testing.T) {
 		t.Errorf("Expected market status FINALIZED, got %s", updatedMarket.Status)
 	}
 
-	// Verify winner received payout (parimutuel: bet 100, total pool 200, winning pool 100, payout = 100 * 200 / 100 = 200)
+	// Verify winner received payout (parimutuel: bet 1000, total pool 2000, winning pool 1000, payout = 1000 * 2000 / 1000 = 2000)
 	winnerAfter, _ := storage.GetUserByID(winner.ID)
-	expectedPayout := int64(20000) // 200.00 in cents
+	expectedPayout := int64(2000) // 2000 in new integer format
 	if winnerAfter.Balance-winnerBefore.Balance != expectedPayout {
 		t.Errorf("Expected winner payout of %d, got %d", expectedPayout, winnerAfter.Balance-winnerBefore.Balance)
 	}
@@ -222,14 +222,14 @@ func TestFinalizeMarketWithForceOutcome(t *testing.T) {
 
 	// Create test users
 	creator, _ := storage.CreateUser(99999, "creator", "Creator")
-	winner, _ := storage.CreateUser(100000, "winner", "Winner")
+	winner, _ := storage.CreateUser(1000, "winner", "Winner")
 
 	// Create a test market
 	expiresAt := time.Now().Add(1 * time.Hour)
 	market, _ := storage.CreateMarket(creator.ID, "Test market question?", expiresAt)
 
 	// Place bets WHILE market is ACTIVE
-	_ = storage.PlaceBet(ctx, winner.ID, market.ID, "YES", 10000) // Bet on YES
+	_ = storage.PlaceBet(ctx, winner.ID, market.ID, "YES", 1000) // Bet on YES
 
 	// Now lock and resolve the market (creator said NO, but admin will override)
 	storage.UpdateMarketStatus(market.ID, storage.MarketStatusLocked, "")
@@ -270,7 +270,7 @@ func TestFinalizeMarketNoWinnersRefund(t *testing.T) {
 	market, _ := storage.CreateMarket(creator.ID, "Test market question?", expiresAt)
 
 	// Place bet on NO WHILE market is ACTIVE
-	_ = storage.PlaceBet(ctx, bettor.ID, market.ID, "NO", 10000)
+	_ = storage.PlaceBet(ctx, bettor.ID, market.ID, "NO", 1000)
 
 	// Now lock and resolve the market (outcome YES)
 	storage.UpdateMarketStatus(market.ID, storage.MarketStatusLocked, "")
@@ -287,10 +287,10 @@ func TestFinalizeMarketNoWinnersRefund(t *testing.T) {
 
 	// Get bettor balance after finalization
 	bettorAfter, _ := storage.GetUserByID(bettor.ID)
-	// Bettor started with 100000, bet 10000, has 90000 left
-	// After refund should be back to 100000
-	if bettorAfter.Balance != 100000 {
-		t.Errorf("Expected bettor balance to be 100000 after refund, got %d", bettorAfter.Balance)
+	// Bettor started with 1000, bet 10000, has 90000 left
+	// After refund should be back to 1000
+	if bettorAfter.Balance != 1000 {
+		t.Errorf("Expected bettor balance to be 1000 after refund, got %d", bettorAfter.Balance)
 	}
 }
 

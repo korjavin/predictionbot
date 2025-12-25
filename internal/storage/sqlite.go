@@ -395,7 +395,7 @@ type MarketWithCreator struct {
 // ListActiveMarketsWithCreator returns active markets with creator names
 func ListActiveMarketsWithCreator() ([]MarketWithCreator, error) {
 	rows, err := db.Query(`
-		SELECT m.id, m.question, COALESCE(u.first_name, 'Unknown'), m.expires_at,
+		SELECT m.id, m.question, COALESCE(NULLIF(u.first_name, ''), 'Anonymous'), m.expires_at,
 		       0, 0
 		FROM markets m
 		LEFT JOIN users u ON m.creator_id = u.id
@@ -538,7 +538,7 @@ func GetPoolTotals(marketID int64) (poolYes, poolNo int64, err error) {
 func GetMarketWithPools(marketID int64) (*MarketWithCreator, error) {
 	var market MarketWithCreator
 	err := db.QueryRow(`
-		SELECT m.id, m.question, COALESCE(u.first_name, 'Unknown'),
+		SELECT m.id, m.question, COALESCE(NULLIF(u.first_name, ''), 'Anonymous'),
 		       m.expires_at, 0, 0
 		FROM markets m
 		LEFT JOIN users u ON m.creator_id = u.id

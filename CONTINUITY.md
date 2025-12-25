@@ -172,7 +172,7 @@ Added 55 tests covering all 12 API endpoints for safe refactoring:
 
 ### Root Cause
 - Same ID mismatch pattern as HandleMe/HandleBailout
-- Context stores **Telegram ID** (e.g., 59701326)
+- Context stores **Telegram ID** (e.g., <TG_ID_1>)
 - `storage.PlaceBet()` expects **internal database ID** (e.g., 1, 2, 3...)
 - Handler was passing Telegram ID where internal DB ID was needed
 - PlaceBet's SQL query: `SELECT balance FROM users WHERE id = ?` expects `id` column (internal), not `telegram_id`
@@ -279,7 +279,7 @@ Added 55 tests covering all 12 API endpoints for safe refactoring:
 - `handleCreateMarket()` was passing **Telegram ID** from context as `creator_id`
 - `storage.CreateMarket()` expects **internal database ID** as creator parameter
 - Markets table foreign key: `creator_id` → `users.id` (not `users.telegram_id`)
-- When JOIN tried to match, no user found (searching for id=59701326 instead of id=1)
+- When JOIN tried to match, no user found (searching for id=<TG_ID_1> instead of id=1)
 
 ### Fix Applied
 **Backend (internal/handlers/markets.go):**
@@ -289,11 +289,11 @@ Added 55 tests covering all 12 API endpoints for safe refactoring:
 - Removed redundant user lookup in broadcast goroutine (reused already-fetched user)
 
 **Database Migration (production server):**
-- Existing 4 markets had Telegram IDs as creator_id (59701326, 2106286597, 1216163158)
+- Existing 4 markets had Telegram IDs as creator_id (<TG_ID_1>, <TG_ID_2>, <TG_ID_3>)
 - Mapped to correct internal user IDs:
-  - `UPDATE markets SET creator_id = 1 WHERE creator_id = 59701326;` (engelbart)
-  - `UPDATE markets SET creator_id = 2 WHERE creator_id = 1216163158;` (Vladimir)
-  - `UPDATE markets SET creator_id = 3 WHERE creator_id = 2106286597;` (Vasiliy)
+  - `UPDATE markets SET creator_id = 1 WHERE creator_id = <TG_ID_1>;` (<USER_1>)
+  - `UPDATE markets SET creator_id = 2 WHERE creator_id = <TG_ID_3>;` (<USER_2>)
+  - `UPDATE markets SET creator_id = 3 WHERE creator_id = <TG_ID_2>;` (<USER_3>)
 - Stopped container, copied fixed DB, restarted
 
 **Result:**

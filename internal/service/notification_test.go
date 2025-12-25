@@ -88,36 +88,36 @@ func TestParseChannelID(t *testing.T) {
 func TestFormatBalance(t *testing.T) {
 	tests := []struct {
 		name     string
-		cents    int64
+		balance  int64
 		expected string
 	}{
 		{
 			name:     "zero",
-			cents:    0,
-			expected: "0.00 WSC",
+			balance:  0,
+			expected: "0 WSC",
 		},
 		{
-			name:     "one dollar",
-			cents:    100,
-			expected: "1.00 WSC",
+			name:     "one_dollar",
+			balance:  100,
+			expected: "100 WSC",
 		},
 		{
-			name:     "whole dollars",
-			cents:    50000,
-			expected: "500.00 WSC",
+			name:     "whole_dollars",
+			balance:  50000,
+			expected: "50000 WSC",
 		},
 		{
-			name:     "decimal cents",
-			cents:    12345,
-			expected: "123.45 WSC",
+			name:     "decimal_cents",
+			balance:  12345,
+			expected: "12345 WSC",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := formatBalance(tt.cents)
+			result := formatBalance(tt.balance)
 			if result != tt.expected {
-				t.Errorf("formatBalance(%d) = %q, want %q", tt.cents, result, tt.expected)
+				t.Errorf("formatBalance(%d) = %q, want %q", tt.balance, result, tt.expected)
 			}
 		})
 	}
