@@ -39,12 +39,17 @@ API Test Suite for Safe Refactoring - COMPLETED
 - API Test Suite: 55 tests covering all 12 endpoints
 
 ## Now
-- Refactoring work can proceed with confidence
-- Test suite provides safety net for contract changes
+- Frontend owner controls available for resolving markets
+- DM notifications sent to market owners when deadline passes
+- Bot commands: /resolve_yes, /resolve_no, /my_markets
+- Channel notifications automatically sent when markets are resolved (if CHANNEL_ID configured)
+- Ready to resolve today's deadline markets
 
 ## Next
-- Proceed with planned refactoring
-- Add more tests as new features are added
+- Resolve today's deadline markets
+- Monitor notification delivery
+- Consider adding more owner management features
+- Expand test coverage for new functionality
 
 ## Open questions
 - None
@@ -52,7 +57,44 @@ API Test Suite for Safe Refactoring - COMPLETED
 ## Working set (files/ids/commands)
 - internal/handlers/handlers_test.go (55 tests)
 - plans/api_test_plan.md (test plan document)
+- web/app.js (frontend owner controls)
+- internal/service/notification.go (DM notifications)
+- internal/bot/bot.go (resolve commands)
 - Test command: `go test -v ./internal/handlers/...`
+
+## 2024-12-25 - Owner Controls, DM Notifications & Bot Commands
+### Summary
+Added three key features for market owners to manage their markets:
+
+### 1. Frontend Owner Controls
+**Files:** `web/app.js`, `web/index.html`
+- Added "Resolve Market" section visible only to market creator when market is LOCKED
+- Two buttons: "Resolve YES" and "Resolve NO"
+- Loading states, error handling, and success feedback
+- Calls `POST /api/markets/{id}/resolve` endpoint
+
+### 2. DM Notification to Market Owner
+**Files:** `internal/service/notification.go`, `internal/service/market_worker.go`
+- Added `NotifyMarketCreatorDeadline()` function
+- Triggered when market deadline passes (in `lockExpiredMarkets()`)
+- Sends DM: "Your market '<question>' has reached its deadline. Please resolve it."
+- Includes bot commands: `/resolve_yes` or `/resolve_no`
+
+### 3. Telegram Bot Commands
+**File:** `internal/bot/bot.go`
+- `/resolve_yes <market_id>` - Resolve market as YES (creator only)
+- `/resolve_no <market_id>` - Resolve market as NO (creator only)
+- `/my_markets` - List all markets created by the user
+- Creator verification before allowing resolution
+- Success/error responses back to user
+
+### 4. Channel Notifications (Already Existed)
+Verified `PublishResolution()` is already implemented:
+- Sends to configured `CHANNEL_ID` environment variable
+- Called automatically when market is resolved
+- Format: Market resolved, outcome, total pool, congratulations
+
+---
 
 ## 2024-12-25 - Comprehensive API Test Suite
 ### Summary

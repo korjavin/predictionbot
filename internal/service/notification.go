@@ -168,6 +168,48 @@ func (s *NotificationService) SendLossNotification(userID int64, marketID int64,
 	}
 }
 
+// NotifyMarketCreatorDeadline sends a DM to the market creator when their market expires
+func (s *NotificationService) NotifyMarketCreatorDeadline(market *storage.Market) {
+	if market == nil {
+		return
+	}
+
+	// Get the creator's user record
+	user, err := storage.GetUserByID(market.CreatorID)
+	if err != nil || user == nil {
+		logger.Debug(market.CreatorID, "notification_error", "failed to get market creator")
+		return
+	}
+
+	if user.TelegramID == 0 {
+		logger.Debug(market.CreatorID, "notification_error", "creator has no telegram_id")
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Format the deadline notification message
+	message := fmt.Sprintf("⏰ *Market Deadline Reached*\n\nYour market '#%d %s' has reached its deadline and is now locked.\n\n"+
+		"Please resolve it to distribute winnings:\n"+
+		"• Use the web app to resolve\n"+
+		"• Or use commands: /resolve_yes %d or /resolve_no %d",
+		market.ID,
+		truncateString(market.Question, 50),
+		market.ID,
+		market.ID)
+
+	_, err = s.bot.Send(&telebot.User{ID: user.TelegramID}, message, &telebot.SendOptions{
+		ParseMode: telebot.ModeMarkdown,
+	})
+	if err != nil {
+		logger.Debug(market.CreatorID, "notification_error", fmt.Sprintf("failed to send deadline notification: %v", err))
+		log.Printf("Failed to send deadline notification to user %d (telegram_id: %d): %v", market.CreatorID, user.TelegramID, err)
+	} else {
+		logger.Debug(market.CreatorID, "deadline_notification_sent", fmt.Sprintf("market_id=%d", market.ID))
+	}
+}
+
 // truncateString truncates a string to maxLen and adds ellipsis if needed
 func truncateString(s string, maxLen int) string {
 	if len(s) <= maxLen {

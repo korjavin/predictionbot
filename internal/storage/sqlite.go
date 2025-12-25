@@ -431,6 +431,68 @@ func ListActiveMarketsWithCreator() ([]MarketWithCreator, error) {
 	return markets, nil
 }
 
+// MarketCreatorInfo represents market info for creator view
+type MarketCreatorInfo struct {
+	ID        int64  `json:"id"`
+	Question  string `json:"question"`
+	Status    string `json:"status"`
+	Outcome   string `json:"outcome,omitempty"`
+	ExpiresAt string `json:"expires_at"`
+	PoolYes   int64  `json:"pool_yes"`
+	PoolNo    int64  `json:"pool_no"`
+}
+
+// GetMarketsByCreator returns all markets created by a user
+func GetMarketsByCreator(creatorID int64) ([]MarketCreatorInfo, error) {
+	rows, err := db.Query(`
+		SELECT m.id, m.question, m.status, m.outcome, m.expires_at
+		FROM markets m
+		WHERE m.creator_id = ?
+		ORDER BY m.created_at DESC
+	`, creatorID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query creator markets: %w", err)
+	}
+	defer rows.Close()
+
+	var markets []MarketCreatorInfo
+	for rows.Next() {
+		var market MarketCreatorInfo
+		var outcome sql.NullString
+		var expiresAt time.Time
+		err := rows.Scan(&market.ID, &market.Question, &market.Status, &outcome, &expiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan market: %w", err)
+		}
+		if outcome.Valid {
+			market.Outcome = outcome.String
+		}
+		market.ExpiresAt = expiresAt.Format("Jan 2, 15:04")
+
+		// Get pool totals
+		var poolYes, poolNo int64
+		err = db.QueryRow(`
+			SELECT
+				COALESCE(SUM(CASE WHEN outcome = 'YES' THEN amount ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN outcome = 'NO' THEN amount ELSE 0 END), 0)
+			FROM bets WHERE market_id = ?
+		`, market.ID).Scan(&poolYes, &poolNo)
+		if err != nil {
+			poolYes, poolNo = 0, 0
+		}
+		market.PoolYes = poolYes
+		market.PoolNo = poolNo
+
+		markets = append(markets, market)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating markets: %w", err)
+	}
+
+	return markets, nil
+}
+
 // PlaceBet places a bet on a market with ACID transaction
 func PlaceBet(ctx context.Context, userID, marketID int64, outcome string, amount int64) error {
 	// Validate outcome

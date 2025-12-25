@@ -466,6 +466,63 @@
             margin-bottom: 16px;
             text-align: center;
         }
+        /* Owner Resolve Controls */
+        .resolve-section {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid var(--tg-theme-hint-color, #888888);
+            background-color: rgba(74, 222, 128, 0.1);
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .resolve-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--tg-theme-button-color, #4ade80);
+            margin-bottom: 12px;
+            text-align: center;
+        }
+        .resolve-question {
+            font-size: 13px;
+            color: var(--tg-theme-text-color, #ffffff);
+            margin-bottom: 12px;
+            text-align: center;
+            font-style: italic;
+        }
+        .resolve-buttons {
+            display: flex;
+            gap: 12px;
+        }
+        .resolve-btn {
+            flex: 1;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            transition: opacity 0.2s;
+        }
+        .resolve-btn:active {
+            opacity: 0.7;
+        }
+        .resolve-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .resolve-btn-yes {
+            background-color: var(--tg-theme-button-color, #4ade80);
+            color: #000000;
+        }
+        .resolve-btn-no {
+            background-color: #ff6b6b;
+            color: #ffffff;
+        }
+        .resolve-message {
+            margin-top: 12px;
+            text-align: center;
+        }
     </style>
 </head>
 <body>

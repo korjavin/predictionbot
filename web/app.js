@@ -295,6 +295,9 @@ async function renderMarkets() {
             const totalPool = (market.pool_yes || 0) + (market.pool_no || 0);
             const yesPercent = totalPool > 0 ? ((market.pool_yes || 0) / totalPool * 100).toFixed(0) : 50;
             const noPercent = totalPool > 0 ? ((market.pool_no || 0) / totalPool * 100).toFixed(0) : 50;
+            const isCreator = currentUser && market.creator_id === currentUser.id;
+            const isLocked = market.status === 'LOCKED';
+            const canResolve = isCreator && isLocked;
             
             return `
                 <div class="market-card" id="market-${market.id}">
@@ -308,25 +311,44 @@ async function renderMarkets() {
                         <span class="odds-separator">|</span>
                         <span class="odds-no">NO ${noPercent}%</span>
                     </div>
-                    <div class="betting-ui ${isExpired ? 'disabled' : ''}" id="betting-ui-${market.id}">
+                    ${canResolve ? `
+                    <div class="resolve-section" id="resolve-section-${market.id}">
+                        <div class="resolve-section-title">🎯 Resolve Market</div>
+                        <div class="resolve-question">${escapeHtml(market.question)}</div>
+                        <div class="resolve-buttons">
+                            <button class="resolve-btn resolve-btn-yes"
+                                    data-market="${market.id}"
+                                    data-outcome="YES">
+                                Resolve YES
+                            </button>
+                            <button class="resolve-btn resolve-btn-no"
+                                    data-market="${market.id}"
+                                    data-outcome="NO">
+                                Resolve NO
+                            </button>
+                        </div>
+                        <div class="resolve-message" id="resolve-message-${market.id}"></div>
+                    </div>
+                    ` : ''}
+                    <div class="betting-ui ${isExpired || isLocked ? 'disabled' : ''}" id="betting-ui-${market.id}">
                         <div class="bet-amount-group">
                             <input type="number" 
                                    id="bet-amount-${market.id}" 
                                    placeholder="Amount" 
                                    min="1" 
-                                   ${isExpired ? 'disabled' : ''}>
+                                   ${isExpired || isLocked ? 'disabled' : ''}>
                         </div>
                         <div class="bet-buttons">
                             <button class="btn btn-yes bet-btn"
                                     data-market="${market.id}"
                                     data-outcome="YES"
-                                    ${isExpired ? 'disabled' : ''}>
+                                    ${isExpired || isLocked ? 'disabled' : ''}>
                                 YES<br><small>${formatBalance(market.pool_yes || 0)}</small>
                             </button>
                             <button class="btn btn-no bet-btn"
                                     data-market="${market.id}"
                                     data-outcome="NO"
-                                    ${isExpired ? 'disabled' : ''}>
+                                    ${isExpired || isLocked ? 'disabled' : ''}>
                                 NO<br><small>${formatBalance(market.pool_no || 0)}</small>
                             </button>
                         </div>
@@ -339,6 +361,11 @@ async function renderMarkets() {
         // Add click handlers for bet buttons
         document.querySelectorAll('.bet-btn').forEach(btn => {
             btn.addEventListener('click', handleBetClick);
+        });
+        
+        // Add click handlers for resolve buttons
+        document.querySelectorAll('.resolve-btn').forEach(btn => {
+            btn.addEventListener('click', handleResolveClick);
         });
     } catch (error) {
         console.error('Failed to render markets:', error);
@@ -420,6 +447,70 @@ async function placeBet(marketId, outcome, amount) {
     }
 
     return response.json();
+}
+
+// Resolve a market (owner only, when LOCKED)
+async function resolveMarket(marketId, outcome) {
+    const response = await fetch(`/api/markets/${marketId}/resolve`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Telegram-Init-Data': initData
+        },
+        body: JSON.stringify({
+            outcome: outcome
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || error.error || 'Failed to resolve market');
+    }
+
+    return response.json();
+}
+
+// Handle YES/NO resolve button clicks
+async function handleResolveClick(event) {
+    const btn = event.currentTarget;
+    const marketId = parseInt(btn.dataset.market, 10);
+    const outcome = btn.dataset.outcome;
+    const messageEl = document.getElementById(`resolve-message-${marketId}`);
+    const resolveSection = document.getElementById(`resolve-section-${marketId}`);
+    
+    // Disable button and show loading state
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Resolving...';
+    messageEl.innerHTML = '';
+    
+    try {
+        await resolveMarket(marketId, outcome);
+        
+        // Show success message
+        messageEl.innerHTML = `<div class="success-message">✓ Market resolved to ${outcome}!</div>`;
+        
+        // Provide haptic feedback
+        if (telegramWebApp) {
+            telegramWebApp.HapticFeedback.notificationOccurred('success');
+        }
+        
+        // Refresh markets to show updated status
+        await renderMarkets();
+        
+    } catch (error) {
+        // Show error message
+        messageEl.innerHTML = `<div class="error-message">${escapeHtml(error.message)}</div>`;
+        
+        // Restore button state
+        btn.disabled = false;
+        btn.textContent = originalText;
+        
+        // Provide haptic feedback for error
+        if (telegramWebApp) {
+            telegramWebApp.HapticFeedback.notificationOccurred('error');
+        }
+    }
 }
 
 // Create a new market
