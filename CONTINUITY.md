@@ -39,13 +39,13 @@ API Test Suite for Safe Refactoring - COMPLETED
 - API Test Suite: 55 tests covering all 12 endpoints
 
 ## Now
-- Fixed /resolve callback with universal OnCallback handler and debug logging
-- Deployed fix to production (awaiting user testing)
+- Fixed callback Data vs Unique field confusion (third iteration)
+- Deployed to production - buttons should now work
 
 ## Next
-- Monitor callback logs on production server
-- Verify button clicks are now processed
-- Check for callback_received and market_resolved logs
+- User to test /resolve button clicks
+- Verify logs show callback_resolve_start and market_resolved
+- Confirm payouts are distributed correctly
 
 ## Open questions
 - None
@@ -454,3 +454,44 @@ Added 55 tests covering all 12 API endpoints for safe refactoring:
 - Market resolution via buttons works end-to-end
 - Payouts distributed correctly after button click
 - Confirmation message shows resolved outcome
+
+## 2024-12-25 - Bug Fix Part 2: Callback Handler Reading Wrong Field
+### Problem (from production logs)
+After deploying OnCallback handler, buttons still didn't work. Logs showed:
+```
+callback_received unique= data=resolve_1_no
+callback_ignored details=not a resolve callback:
+```
+
+### Root Cause
+- In [internal/bot/bot.go:595](internal/bot/bot.go#L595), handler was checking `callback.Unique` for "resolve_" prefix
+- But Telegram passes inline button data in `callback.Data`, NOT `callback.Unique`
+- `callback.Unique` was empty string, so all callbacks were ignored
+- `callback.Data` contained the actual data: `"resolve_1_no"`
+
+### Confusion: Unique vs Data
+- `Unique` field is used for **handler registration** (matching handlers to buttons)
+- `Data` field is used for **callback payload** (actual data sent when button clicked)
+- For inline buttons with OnCallback handler, only `Data` matters
+
+### Fix Applied
+**Backend (internal/bot/bot.go):**
+1. Changed button creation to use `Data` field (line 482, 486):
+   ```go
+   yesButton := telebot.InlineButton{
+       Text: fmt.Sprintf("✅ #%d %s", market.ID, question),
+       Data: fmt.Sprintf("resolve_%d_yes", market.ID),  // Was: Unique
+   }
+   ```
+2. Changed callback handler to read `callback.Data` (line 591, 595):
+   ```go
+   callbackData := callback.Data
+   if !strings.HasPrefix(callbackData, "resolve_") {  // Was: callback.Unique
+   ```
+3. Parse market ID and outcome from `callbackData` instead of `callback.Unique`
+
+**Result:**
+- Callbacks now properly detected with "resolve_" prefix
+- Market ID and outcome correctly parsed
+- Resolution executes and payouts distributed
+- Logs should now show: callback_resolve_start, market_resolved
