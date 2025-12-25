@@ -39,10 +39,11 @@ API Test Suite for Safe Refactoring - COMPLETED
 - API Test Suite: 55 tests covering all 12 endpoints
 
 ## Now
-- Fixing bug in /list command: pool amounts always show 0
+- Deployed fix for /list command pool amounts bug
+- System ready for production use
 
 ## Next
-- Test fix in production
+- Monitor /list command in production
 - Monitor notification delivery
 - Consider adding more owner management features
 
@@ -50,12 +51,9 @@ API Test Suite for Safe Refactoring - COMPLETED
 - None
 
 ## Working set (files/ids/commands)
-- internal/handlers/handlers_test.go (55 tests)
-- plans/api_test_plan.md (test plan document)
-- web/app.js (frontend owner controls)
-- internal/service/notification.go (DM notifications)
-- internal/bot/bot.go (resolve commands)
-- Test command: `go test -v ./internal/handlers/...`
+- internal/storage/sqlite.go (pool amounts calculation)
+- internal/bot/bot.go (/list command)
+- Test command: `go test ./internal/storage/...`
 
 ## 2024-12-25 - Owner Controls, DM Notifications & Bot Commands
 ### Summary
@@ -357,3 +355,31 @@ Added 55 tests covering all 12 API endpoints for safe refactoring:
 **Result:**
 - Bet history now loads correctly with actual user data
 - Stats endpoint also fixed with same pattern
+
+## 2024-12-25 - Bug Fix: /list Command Shows Zero Pool Amounts
+### Problem
+- Telegram command `/list` always displayed `💰 YES: 0 | NO: 0` for all markets
+- User confirmed there were actual bets placed on markets
+- Pool totals should show sum of all YES and NO bets
+
+### Root Cause
+- In [internal/storage/sqlite.go:398-399](internal/storage/sqlite.go#L398-L399), SQL query returned hardcoded `0, 0` values
+- Original query: `SELECT ... 0, 0 FROM markets ...`
+- No aggregation of actual bet amounts from bets table
+
+### Fix Applied
+**Backend (internal/storage/sqlite.go):**
+- Changed hardcoded `0, 0` to calculated pool totals using SUM aggregation
+- Added `LEFT JOIN bets b ON m.id = b.market_id`
+- Added `GROUP BY m.id, m.question, u.first_name, m.expires_at, m.created_at`
+- Pool calculation:
+  ```sql
+  COALESCE(SUM(CASE WHEN b.outcome = 'YES' THEN b.amount ELSE 0 END), 0) as pool_yes,
+  COALESCE(SUM(CASE WHEN b.outcome = 'NO' THEN b.amount ELSE 0 END), 0) as pool_no
+  ```
+- Fixed column name: `b.outcome` (not `b.outcome_chosen` - initial typo caught by tests)
+
+**Result:**
+- `/list` command now shows actual pool totals for YES and NO bets
+- All storage tests passing
+- Changes deployed to production via git push
