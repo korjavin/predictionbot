@@ -231,3 +231,34 @@ Task 10: Public News Channel (Broadcasting) - IN PROGRESS
 
 **Result:**
 - Creator names now display correctly in the markets list
+
+## 2024-12-25 - Fix: Market Creation Uses Wrong Creator ID (Telegram ID vs Internal ID)
+### Problem
+- Markets showed "By Unknown" for creator name despite users existing in database
+- Root cause was in market **creation**, not just display
+
+### Root Cause
+- `handleCreateMarket()` was passing **Telegram ID** from context as `creator_id`
+- `storage.CreateMarket()` expects **internal database ID** as creator parameter
+- Markets table foreign key: `creator_id` → `users.id` (not `users.telegram_id`)
+- When JOIN tried to match, no user found (searching for id=59701326 instead of id=1)
+
+### Fix Applied
+**Backend (internal/handlers/markets.go):**
+- Renamed `userID` to `telegramID` for clarity
+- Added user lookup: `storage.GetUserByTelegramID(telegramID)` to get internal user.ID
+- Pass `user.ID` to `CreateMarket()` instead of Telegram ID
+- Removed redundant user lookup in broadcast goroutine (reused already-fetched user)
+
+**Database Migration (production server):**
+- Existing 4 markets had Telegram IDs as creator_id (59701326, 2106286597, 1216163158)
+- Mapped to correct internal user IDs:
+  - `UPDATE markets SET creator_id = 1 WHERE creator_id = 59701326;` (engelbart)
+  - `UPDATE markets SET creator_id = 2 WHERE creator_id = 1216163158;` (Vladimir)
+  - `UPDATE markets SET creator_id = 3 WHERE creator_id = 2106286597;` (Vasiliy)
+- Stopped container, copied fixed DB, restarted
+
+**Result:**
+- All existing markets now show correct creator names
+- New markets will automatically use correct creator IDs
+- JOIN query works properly: users.id = markets.creator_id
