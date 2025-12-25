@@ -211,3 +211,23 @@ Task 10: Public News Channel (Broadcasting) - IN PROGRESS
 **Result:**
 - Bet history now loads correctly on the profile page
 - All storage tests pass
+
+## 2024-12-25 - Bug Fix: Markets List Shows "By Unknown" Instead of Creator Name
+### Problem
+- Markets list displayed "By Unknown" for the creator name instead of the actual Telegram first name
+
+### Root Cause
+- SQL query column order in `ListActiveMarketsWithCreator()` didn't match `MarketWithCreator` struct field order
+- Original query: `SELECT m.id, m.question, COALESCE(u.first_name, 'Unknown'), m.expires_at, 0, 0`
+- Struct order: `ID, Question, CreatorName, ExpiresAt, PoolYes, PoolNo`
+- The `expires_at` timestamp was being scanned into the `CreatorName` field
+
+### Fix Applied
+**Backend (internal/storage/sqlite.go:396):**
+- Reordered SQL columns to match struct field order:
+  ```sql
+  SELECT m.id, m.question, m.expires_at, COALESCE(u.first_name, 'Unknown'), 0, 0
+  ```
+
+**Result:**
+- Creator names now display correctly in the markets list
