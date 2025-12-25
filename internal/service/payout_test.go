@@ -125,6 +125,9 @@ func TestRaiseDispute(t *testing.T) {
 	expiresAt := time.Now().Add(1 * time.Hour)
 	market, _ := storage.CreateMarket(user.ID, "Test market question?", expiresAt)
 
+	// Place a bet on the market (required to dispute)
+	storage.PlaceBet(ctx, user.ID, market.ID, "YES", 1000)
+
 	// Lock and resolve the market
 	storage.UpdateMarketStatus(market.ID, storage.MarketStatusLocked, "")
 	storage.UpdateMarketStatus(market.ID, storage.MarketStatusResolved, "YES")
