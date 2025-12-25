@@ -638,6 +638,18 @@ type BetHistoryItem struct {
 	PlacedAt      string    `json:"placed_at"`
 }
 
+// ActiveBetItem represents a bet on an active market for the /mybets command
+type ActiveBetItem struct {
+	ID            int64  `json:"id"`
+	MarketID      int64  `json:"market_id"`
+	Question      string `json:"question"`
+	OutcomeChosen string `json:"outcome_chosen"`
+	Amount        int64  `json:"amount"`
+	ExpiresAt     string `json:"expires_at"`
+	PoolYes       int64  `json:"pool_yes"`
+	PoolNo        int64  `json:"pool_no"`
+}
+
 // GetUserBets returns all bets for a user with computed status based on market outcome
 func GetUserBets(userID int64) ([]BetHistoryItem, error) {
 	rows, err := db.Query(`
@@ -689,6 +701,57 @@ func GetUserBets(userID int64) ([]BetHistoryItem, error) {
 
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating bets: %w", err)
+	}
+
+	return bets, nil
+}
+
+// GetUserActiveBets returns all bets for a user on active markets
+func GetUserActiveBets(userID int64) ([]ActiveBetItem, error) {
+	rows, err := db.Query(`
+		SELECT b.id, b.market_id, m.question, b.outcome, b.amount, m.expires_at
+		FROM bets b
+		JOIN markets m ON b.market_id = m.id
+		WHERE b.user_id = ? AND m.status = 'ACTIVE'
+		ORDER BY m.expires_at ASC
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query user active bets: %w", err)
+	}
+	defer rows.Close()
+
+	var bets []ActiveBetItem
+	for rows.Next() {
+		var b ActiveBetItem
+		var expiresAt time.Time
+
+		err := rows.Scan(&b.ID, &b.MarketID, &b.Question, &b.OutcomeChosen, &b.Amount, &expiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan active bet: %w", err)
+		}
+
+		b.ExpiresAt = expiresAt.Format("Jan 2, 15:04")
+		bets = append(bets, b)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating active bets: %w", err)
+	}
+
+	// Get pool totals for each market
+	for i := range bets {
+		var poolYes, poolNo int64
+		err = db.QueryRow(`
+			SELECT 
+				COALESCE(SUM(CASE WHEN outcome = 'YES' THEN amount ELSE 0 END), 0),
+				COALESCE(SUM(CASE WHEN outcome = 'NO' THEN amount ELSE 0 END), 0)
+			FROM bets WHERE market_id = ?
+		`, bets[i].MarketID).Scan(&poolYes, &poolNo)
+		if err != nil {
+			poolYes, poolNo = 0, 0
+		}
+		bets[i].PoolYes = poolYes
+		bets[i].PoolNo = poolNo
 	}
 
 	return bets, nil
