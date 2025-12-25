@@ -262,3 +262,23 @@ Task 10: Public News Channel (Broadcasting) - IN PROGRESS
 - All existing markets now show correct creator names
 - New markets will automatically use correct creator IDs
 - JOIN query works properly: users.id = markets.creator_id
+
+## 2024-12-25 - Fix: Bet History Still Failing (Telegram ID vs Internal ID)
+### Problem
+- User reported "Failed to load bet history" still showing on profile page
+- Same error despite previous struct/scan fix
+
+### Root Cause
+- **HandleUserBets** and **HandleUserStats** were using **Telegram ID** from context
+- `storage.GetUserBets()` and `storage.GetUserStats()` expect **internal database ID**
+- Query: `SELECT ... FROM bets WHERE user_id = ?` expects users.id (1,2,3), not telegram_id
+
+### Fix Applied
+**Backend (internal/handlers/history.go):**
+- Renamed `userID` to `telegramID` in both functions
+- Added user lookup: `storage.GetUserByTelegramID(telegramID)`
+- Pass `user.ID` to `GetUserBets()` and `GetUserStats()` instead of Telegram ID
+
+**Result:**
+- Bet history now loads correctly with actual user data
+- Stats endpoint also fixed with same pattern
