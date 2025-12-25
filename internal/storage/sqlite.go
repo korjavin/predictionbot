@@ -442,6 +442,13 @@ type MarketCreatorInfo struct {
 	PoolNo    int64  `json:"pool_no"`
 }
 
+// MarketResolutionInfo represents market info for resolution selection
+type MarketResolutionInfo struct {
+	ID        int64  `json:"id"`
+	Question  string `json:"question"`
+	ExpiresAt string `json:"expires_at"`
+}
+
 // GetMarketsByCreator returns all markets created by a user
 func GetMarketsByCreator(creatorID int64) ([]MarketCreatorInfo, error) {
 	rows, err := db.Query(`
@@ -483,6 +490,38 @@ func GetMarketsByCreator(creatorID int64) ([]MarketCreatorInfo, error) {
 		market.PoolYes = poolYes
 		market.PoolNo = poolNo
 
+		markets = append(markets, market)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating markets: %w", err)
+	}
+
+	return markets, nil
+}
+
+// GetMarketsEligibleForResolution returns markets eligible for resolution (LOCKED status) by creator
+func GetMarketsEligibleForResolution(creatorID int64) ([]MarketResolutionInfo, error) {
+	rows, err := db.Query(`
+		SELECT m.id, m.question, m.expires_at
+		FROM markets m
+		WHERE m.creator_id = ? AND m.status = 'LOCKED'
+		ORDER BY m.created_at DESC
+	`, creatorID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query eligible markets: %w", err)
+	}
+	defer rows.Close()
+
+	var markets []MarketResolutionInfo
+	for rows.Next() {
+		var market MarketResolutionInfo
+		var expiresAt time.Time
+		err := rows.Scan(&market.ID, &market.Question, &expiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan market: %w", err)
+		}
+		market.ExpiresAt = expiresAt.Format("Jan 2, 15:04")
 		markets = append(markets, market)
 	}
 
