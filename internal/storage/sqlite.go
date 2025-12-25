@@ -395,7 +395,7 @@ type MarketWithCreator struct {
 // ListActiveMarketsWithCreator returns active markets with creator names
 func ListActiveMarketsWithCreator() ([]MarketWithCreator, error) {
 	rows, err := db.Query(`
-		SELECT m.id, m.question, m.expires_at, COALESCE(u.first_name, 'Unknown'),
+		SELECT m.id, m.question, COALESCE(u.first_name, 'Unknown'), m.expires_at,
 		       0, 0
 		FROM markets m
 		LEFT JOIN users u ON m.creator_id = u.id

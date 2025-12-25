@@ -218,15 +218,15 @@ Task 10: Public News Channel (Broadcasting) - IN PROGRESS
 
 ### Root Cause
 - SQL query column order in `ListActiveMarketsWithCreator()` didn't match `MarketWithCreator` struct field order
-- Original query: `SELECT m.id, m.question, COALESCE(u.first_name, 'Unknown'), m.expires_at, 0, 0`
-- Struct order: `ID, Question, CreatorName, ExpiresAt, PoolYes, PoolNo`
+- Original query: `SELECT m.id, m.question, m.expires_at, COALESCE(u.first_name, 'Unknown'), 0, 0`
+- Scan order: `ID, Question, CreatorName, ExpiresAt, PoolYes, PoolNo`
 - The `expires_at` timestamp was being scanned into the `CreatorName` field
 
 ### Fix Applied
-**Backend (internal/storage/sqlite.go:396):**
+**Backend (internal/storage/sqlite.go:398):**
 - Reordered SQL columns to match struct field order:
   ```sql
-  SELECT m.id, m.question, m.expires_at, COALESCE(u.first_name, 'Unknown'), 0, 0
+  SELECT m.id, m.question, COALESCE(u.first_name, 'Unknown'), m.expires_at, 0, 0
   ```
 
 **Result:**
