@@ -259,7 +259,7 @@ func StartBot() {
 
 				historyText += fmt.Sprintf("\n*%d.* %s\n"+
 					"   📝 %s\n"+
-					"   🎯 %s %s | %s WSC%s\n"+
+					"   🎯 %s %s | %d WSC%s\n"+
 					"   %s %s",
 					i+1,
 					statusEmoji,
