@@ -178,3 +178,14 @@ Task 10: Public News Channel (Broadcasting) - IN PROGRESS
 - Consistent integer display across all views
 - New users start with balance 1000 (not 100000)
 - Bailout gives 500 when balance < 1
+
+**Database Migration :**
+- SSH'd to production server
+- Copied database from container: `/app/data/market.db`
+- Created backup before migration
+- Ran SQL migration to divide all amounts by 100:
+  - `UPDATE users SET balance = balance / 100;`
+  - `UPDATE bets SET amount = amount / 100;`
+  - `UPDATE transactions SET amount = amount / 100;`
+- Stopped container, copied migrated DB back, restarted
+- Verified: 4 existing users now have correct balances (990, 750, 985, 1000)
