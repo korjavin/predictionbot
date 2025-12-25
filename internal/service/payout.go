@@ -102,11 +102,12 @@ func (s *PayoutService) RaiseDispute(ctx context.Context, marketID, userID int64
 	// Validate that the market exists and is in RESOLVED status
 	var currentStatus string
 	var question string
+	var outcome string
 	err := db.QueryRowContext(ctx, `
-		SELECT status, question
+		SELECT status, question, outcome
 		FROM markets
 		WHERE id = ?
-	`, marketID).Scan(&currentStatus, &question)
+	`, marketID).Scan(&currentStatus, &question, &outcome)
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("market not found")
 	}
@@ -119,17 +120,45 @@ func (s *PayoutService) RaiseDispute(ctx context.Context, marketID, userID int64
 		return fmt.Errorf("market cannot be disputed: status is %s", currentStatus)
 	}
 
+	// Verify user has a bet on this market
+	var betCount int
+	err = db.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM bets WHERE market_id = ? AND user_id = ?
+	`, marketID, userID).Scan(&betCount)
+	if err != nil {
+		return fmt.Errorf("failed to check user bets: %w", err)
+	}
+	if betCount == 0 {
+		return fmt.Errorf("you must have placed a bet on this market to dispute it")
+	}
+
 	// Update market status to DISPUTED
 	err = storage.UpdateMarketStatus(marketID, storage.MarketStatusDisputed, "")
 	if err != nil {
 		return fmt.Errorf("failed to dispute market: %w", err)
 	}
 
-	logger.Debug(userID, "market_disputed", fmt.Sprintf("market_id=%d", marketID))
+	logger.Debug(userID, "market_disputed", fmt.Sprintf("market_id=%d outcome=%s", marketID, outcome))
 
-	// Send dispute alert to admin
-	if s.notificationService != nil {
-		go s.notificationService.SendDisputeAlert(marketID, question, userID)
+	// Get notification service
+	notifService := GetNotificationService()
+	if notifService != nil {
+		// Send all notifications in goroutines
+		go func() {
+			// 1. Broadcast to public channel
+			notifService.PublishDispute(marketID, question, outcome)
+
+			// 2. Send alert to admin
+			notifService.SendDisputeAlert(marketID, question, userID)
+
+			// 3. Notify market creator
+			market, err := storage.GetMarketByID(marketID)
+			if err == nil && market != nil {
+				notifService.NotifyDisputeToCreator(market, outcome)
+			}
+
+			logger.Debug(userID, "dispute_notifications_sent", fmt.Sprintf("market_id=%d", marketID))
+		}()
 	}
 
 	return nil
@@ -314,8 +343,22 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 	}
 
 	// Send notifications after commit (outside transaction)
-	if s.notificationService != nil {
+	notifService := GetNotificationService()
+	if notifService != nil {
 		go func() {
+			// 1. Broadcast finalization to public channel
+			winnersCount := 0
+			totalPayout := int64(0)
+			for _, p := range payoutsToNotify {
+				if p.isWin {
+					winnersCount++
+					totalPayout += p.amount
+				}
+			}
+			wasDisputed := (marketStatus == string(storage.MarketStatusDisputed))
+			notifService.PublishFinalization(marketID, question, outcome, winnersCount, totalPayout, wasDisputed)
+
+			// 2. Send individual notifications to users
 			for _, p := range payoutsToNotify {
 				user, err := storage.GetUserByID(p.userID)
 				if err != nil || user == nil {
@@ -323,15 +366,17 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 				}
 
 				if p.isWin {
-					s.notificationService.SendWinNotification(p.userID, marketID, question, p.amount, user.Balance)
+					notifService.SendWinNotification(p.userID, marketID, question, p.amount, user.Balance)
 				} else if winningPool == 0 {
 					// Refund case
-					s.notificationService.SendRefundNotification(p.userID, marketID, question, p.amount, user.Balance)
+					notifService.SendRefundNotification(p.userID, marketID, question, p.amount, user.Balance)
 				} else {
 					// Loss case
-					s.notificationService.SendLossNotification(p.userID, marketID, question, p.amount)
+					notifService.SendLossNotification(p.userID, marketID, question, p.amount)
 				}
 			}
+
+			logger.Debug(0, "finalization_notifications_sent", fmt.Sprintf("market_id=%d winners=%d", marketID, winnersCount))
 		}()
 	}
 

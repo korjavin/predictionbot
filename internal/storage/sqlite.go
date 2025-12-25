@@ -535,6 +535,69 @@ func GetMarketsEligibleForResolution(creatorID int64) ([]MarketResolutionInfo, e
 	return markets, nil
 }
 
+// GetMarketsEligibleForDispute returns RESOLVED markets that user has bet on and can dispute
+func GetMarketsEligibleForDispute(userID int64) ([]MarketResolutionInfo, error) {
+	rows, err := db.Query(`
+		SELECT DISTINCT m.id, m.question, m.expires_at
+		FROM markets m
+		INNER JOIN bets b ON m.id = b.market_id
+		WHERE b.user_id = ? AND m.status = 'RESOLVED'
+		ORDER BY m.created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query disputeable markets: %w", err)
+	}
+	defer rows.Close()
+
+	var markets []MarketResolutionInfo
+	for rows.Next() {
+		var market MarketResolutionInfo
+		var expiresAt time.Time
+		if err := rows.Scan(&market.ID, &market.Question, &expiresAt); err != nil {
+			return nil, fmt.Errorf("failed to scan market: %w", err)
+		}
+		market.ExpiresAt = expiresAt.Format("2006-01-02 15:04")
+		markets = append(markets, market)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating markets: %w", err)
+	}
+
+	return markets, nil
+}
+
+// GetDisputedMarkets returns all disputed markets for admin review
+func GetDisputedMarkets() ([]MarketResolutionInfo, error) {
+	rows, err := db.Query(`
+		SELECT m.id, m.question, m.expires_at
+		FROM markets m
+		WHERE m.status = 'DISPUTED'
+		ORDER BY m.created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query disputed markets: %w", err)
+	}
+	defer rows.Close()
+
+	var markets []MarketResolutionInfo
+	for rows.Next() {
+		var market MarketResolutionInfo
+		var expiresAt time.Time
+		if err := rows.Scan(&market.ID, &market.Question, &expiresAt); err != nil {
+			return nil, fmt.Errorf("failed to scan market: %w", err)
+		}
+		market.ExpiresAt = expiresAt.Format("2006-01-02 15:04")
+		markets = append(markets, market)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating markets: %w", err)
+	}
+
+	return markets, nil
+}
+
 // PlaceBet places a bet on a market with ACID transaction
 func PlaceBet(ctx context.Context, userID, marketID int64, outcome string, amount int64) error {
 	// Validate outcome

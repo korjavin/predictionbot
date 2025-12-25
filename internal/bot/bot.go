@@ -110,7 +110,8 @@ func StartBot() {
 			"/list - View all active prediction markets\n" +
 			"/mybets - View your active bets\n" +
 			"/mymarkets - View markets you created\n" +
-			"/resolve - Resolve a market you created (interactive selection)\n\n" +
+			"/resolve - Resolve a market you created (interactive)\n" +
+			"/dispute - Raise a dispute on a resolved market (interactive)\n\n" +
 			"🎯 Open the Prediction Market web app to create markets and place bets!"
 		return c.Send(helpText, &telebot.SendOptions{
 			ParseMode: telebot.ModeMarkdown,

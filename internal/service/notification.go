@@ -277,7 +277,7 @@ func (s *NotificationService) PublishResolution(marketID int64, question string,
 		outcomeEmoji = "❌"
 	}
 
-	message := fmt.Sprintf("🏁 *Market Resolved*\n\n*#%d* %s\n\n%s Outcome: *%s*\n💰 Total Pool: %s\n\nCongratulations to the winners!",
+	message := fmt.Sprintf("🏁 *Market Resolved*\n\n*#%d* %s\n\n%s Outcome: *%s*\n💰 Total Pool: %s\n\n⏰ *Dispute Period: 24 hours*\n\nIf you disagree with this outcome, use /dispute to raise a dispute\\.\nWinners will receive payouts after the dispute period ends\\.",
 		marketID,
 		escapeMarkdown(truncateString(question, 80)),
 		outcomeEmoji,
@@ -315,6 +315,109 @@ func parseChannelID(channelID string) int64 {
 		return 0
 	}
 	return id
+}
+
+// PublishDispute broadcasts a dispute notification to the public channel
+func (s *NotificationService) PublishDispute(marketID int64, question string, outcome string) {
+	if s.channelID == "" {
+		logger.Debug(0, "broadcast_skipped", "CHANNEL_ID not configured")
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	logger.Debug(0, "broadcast_dispute_attempt", fmt.Sprintf("channel=%s market_id=%d", s.channelID, marketID))
+
+	message := fmt.Sprintf("⚠️ *Dispute Raised*\n\n*#%d* %s\n\nA user has disputed the resolution of this market\\.\n\n💰 Payouts are frozen pending admin review\\.\nThe admin will review and make a final decision\\.",
+		marketID,
+		escapeMarkdown(truncateString(question, 80)))
+
+	recipient := s.getChannelRecipient()
+	_, err := s.bot.Send(recipient, message, &telebot.SendOptions{
+		ParseMode: telebot.ModeMarkdown,
+	})
+	if err != nil {
+		logger.Debug(0, "broadcast_error", fmt.Sprintf("channel=%s error=%v", s.channelID, err))
+		log.Printf("Failed to publish dispute to channel %s: %v", s.channelID, err)
+	} else {
+		logger.Debug(0, "broadcast_dispute", fmt.Sprintf("market_id=%d channel=%s", marketID, s.channelID))
+		log.Printf("Successfully published dispute for market #%d to channel %s", marketID, s.channelID)
+	}
+}
+
+// PublishFinalization broadcasts market finalization and payout distribution
+func (s *NotificationService) PublishFinalization(marketID int64, question string, outcome string, winnersCount int, totalPayout int64, wasDisputed bool) {
+	if s.channelID == "" {
+		logger.Debug(0, "broadcast_skipped", "CHANNEL_ID not configured")
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	logger.Debug(0, "broadcast_finalization_attempt", fmt.Sprintf("channel=%s market_id=%d winners=%d", s.channelID, marketID, winnersCount))
+
+	outcomeEmoji := "✅"
+	if outcome == "NO" {
+		outcomeEmoji = "❌"
+	}
+
+	statusText := ""
+	if wasDisputed {
+		statusText = "\n\\(Reviewed and confirmed by admin\\)"
+	}
+
+	message := fmt.Sprintf("💰 *Payouts Distributed*\n\n*#%d* %s\n\n%s Final Outcome: *%s*%s\n💸 %d winners received payouts\n🏆 Total distributed: %s\n\nCongratulations to all winners\\!",
+		marketID,
+		escapeMarkdown(truncateString(question, 80)),
+		outcomeEmoji,
+		outcome,
+		statusText,
+		winnersCount,
+		formatBalance(totalPayout))
+
+	recipient := s.getChannelRecipient()
+	_, err := s.bot.Send(recipient, message, &telebot.SendOptions{
+		ParseMode: telebot.ModeMarkdown,
+	})
+	if err != nil {
+		logger.Debug(0, "broadcast_error", fmt.Sprintf("channel=%s error=%v", s.channelID, err))
+		log.Printf("Failed to publish finalization to channel %s: %v", s.channelID, err)
+	} else {
+		logger.Debug(0, "broadcast_finalization", fmt.Sprintf("market_id=%d winners=%d channel=%s", marketID, winnersCount, s.channelID))
+		log.Printf("Successfully published finalization for market #%d to channel %s", marketID, s.channelID)
+	}
+}
+
+// NotifyDisputeToCreator sends a notification to market creator that their market was disputed
+func (s *NotificationService) NotifyDisputeToCreator(market *storage.Market, outcome string) {
+	if market == nil {
+		return
+	}
+
+	user, err := storage.GetUserByID(market.CreatorID)
+	if err != nil || user == nil || user.TelegramID == 0 {
+		logger.Debug(market.CreatorID, "notification_error", "failed to get creator for dispute notification")
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	message := fmt.Sprintf("⚠️ *Your market has been disputed*\n\nMarket #%d: %s\n\nYour resolution: *%s*\n\nAn admin will review and make the final decision.",
+		market.ID,
+		truncateString(market.Question, 50),
+		outcome)
+
+	_, err = s.bot.Send(&telebot.User{ID: user.TelegramID}, message, &telebot.SendOptions{
+		ParseMode: telebot.ModeMarkdown,
+	})
+	if err != nil {
+		logger.Debug(market.CreatorID, "notification_error", fmt.Sprintf("failed to send dispute creator notification: %v", err))
+	} else {
+		logger.Debug(market.CreatorID, "dispute_creator_notified", fmt.Sprintf("market_id=%d", market.ID))
+	}
 }
 
 // escapeMarkdown escapes special characters for Telegram Markdown mode
