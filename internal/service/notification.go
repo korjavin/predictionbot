@@ -72,7 +72,7 @@ func formatBalance(balance int64) string {
 }
 
 // SendWinNotification sends a notification to a user when they win
-func (s *NotificationService) SendWinNotification(userID int64, marketID int64, question string, payout int64, newBalance int64) {
+func (s *NotificationService) SendWinNotification(userID int64, marketID int64, question string, betAmount int64, outcome string, payout int64, newBalance int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -83,10 +83,15 @@ func (s *NotificationService) SendWinNotification(userID int64, marketID int64, 
 		return
 	}
 
-	message := fmt.Sprintf("🏆 Congratulations! You won %s on market '#%d %s'. New Balance: %s",
-		formatBalance(payout),
+	profit := payout - betAmount
+	message := fmt.Sprintf("🏆 You won %s on market #%d\n\n📝 %s\n\nYour bet: %s on %s\nPayout: %s\nProfit: %s\nNew Balance: %s",
+		formatBalance(profit),
 		marketID,
 		truncateString(question, 50),
+		formatBalance(betAmount),
+		outcome,
+		formatBalance(payout),
+		formatBalance(profit),
 		formatBalance(newBalance))
 
 	_, err = s.bot.Send(&telebot.User{ID: user.TelegramID}, message)

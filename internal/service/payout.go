@@ -258,9 +258,11 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 	logger.Debug(0, "market_finalization_started", fmt.Sprintf("market_id=%d outcome=%s total_pool=%d winning_pool=%d", marketID, outcome, totalPool, winningPool))
 
 	type payoutInfo struct {
-		userID int64
-		amount int64
-		isWin  bool
+		userID    int64
+		amount    int64
+		betAmount int64
+		outcome   string
+		isWin     bool
 	}
 
 	var payoutsToNotify []payoutInfo
@@ -292,7 +294,13 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 			}
 
 			payoutsProcessed++
-			payoutsToNotify = append(payoutsToNotify, payoutInfo{userID: b.UserID, amount: b.Amount, isWin: false})
+			payoutsToNotify = append(payoutsToNotify, payoutInfo{
+				userID:    b.UserID,
+				amount:    b.Amount,
+				betAmount: b.Amount,
+				outcome:   b.Outcome,
+				isWin:     false,
+			})
 		}
 	} else {
 		// Calculate and distribute winnings using parimutuel formula
@@ -323,11 +331,23 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 				}
 
 				payoutsProcessed++
-				payoutsToNotify = append(payoutsToNotify, payoutInfo{userID: b.UserID, amount: payout, isWin: true})
+				payoutsToNotify = append(payoutsToNotify, payoutInfo{
+					userID:    b.UserID,
+					amount:    payout,
+					betAmount: b.Amount,
+					outcome:   b.Outcome,
+					isWin:     true,
+				})
 				logger.Debug(b.UserID, "payout_processed", fmt.Sprintf("bet_id=%d market_id=%d bet_amount=%d payout=%d profit=%d", b.ID, marketID, b.Amount, payout, netProfit))
 			} else {
 				// Loss - still track for notification
-				payoutsToNotify = append(payoutsToNotify, payoutInfo{userID: b.UserID, amount: b.Amount, isWin: false})
+				payoutsToNotify = append(payoutsToNotify, payoutInfo{
+					userID:    b.UserID,
+					amount:    b.Amount,
+					betAmount: b.Amount,
+					outcome:   b.Outcome,
+					isWin:     false,
+				})
 			}
 		}
 	}
@@ -371,7 +391,7 @@ func (s *PayoutService) FinalizeMarket(ctx context.Context, marketID int64, forc
 				}
 
 				if p.isWin {
-					notifService.SendWinNotification(p.userID, marketID, question, p.amount, user.Balance)
+					notifService.SendWinNotification(p.userID, marketID, question, p.betAmount, p.outcome, p.amount, user.Balance)
 				} else if winningPool == 0 {
 					// Refund case
 					notifService.SendRefundNotification(p.userID, marketID, question, p.amount, user.Balance)
