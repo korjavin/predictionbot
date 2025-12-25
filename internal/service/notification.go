@@ -132,7 +132,7 @@ func (s *NotificationService) SendDisputeAlert(marketID int64, question string, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	message := fmt.Sprintf("⚠️ Dispute Raised!\n\nMarket ID: #%d\nQuestion: %s\nDisputed by user ID: %d\n\nPlease review and resolve.",
+	message := fmt.Sprintf("⚠️ Dispute Raised!\n\nMarket ID: #%d\nQuestion: %s\nDisputed by user ID: %d\n\nUse /resolve_disputes to review and resolve.",
 		marketID,
 		truncateString(question, 100),
 		disputeUserID)
