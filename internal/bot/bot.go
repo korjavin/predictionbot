@@ -583,7 +583,110 @@ func StartBot() {
 		})
 	})
 
-	// Register universal callback query handler for resolution buttons
+	// Register /dispute command handler (user can dispute resolved markets)
+	b.Handle("/dispute", func(c telebot.Context) error {
+		telegramID := c.Sender().ID
+		logger.Debug(telegramID, "command_dispute", "")
+
+		// Get user
+		user, err := storage.GetUserByTelegramID(telegramID)
+		if err != nil || user == nil {
+			logger.Debug(telegramID, "error", "user_not_found")
+			return c.Send("You haven't started the bot yet. Use /start to create your account!")
+		}
+
+		// Get markets eligible for dispute
+		markets, err := storage.GetMarketsEligibleForDispute(user.ID)
+		if err != nil {
+			logger.Debug(telegramID, "error", fmt.Sprintf("failed to get disputeable markets: %v", err))
+			return c.Send("Error retrieving markets. Please try again.")
+		}
+
+		if len(markets) == 0 {
+			return c.Send("❌ *No Markets to Dispute*\n\nYou don't have any resolved markets that you can dispute.\n\nYou can only dispute markets where:\n• You placed a bet\n• The market is in RESOLVED status\n• The dispute period (24h) hasn't expired", &telebot.SendOptions{
+				ParseMode: telebot.ModeMarkdown,
+			})
+		}
+
+		// Build inline keyboard with dispute buttons
+		var keyboard [][]telebot.InlineButton
+		for _, market := range markets {
+			question := market.Question
+			if len(question) > 30 {
+				question = question[:27] + "..."
+			}
+
+			disputeButton := telebot.InlineButton{
+				Text: fmt.Sprintf("⚠️ Dispute #%d %s", market.ID, question),
+				Data: fmt.Sprintf("dispute_%d", market.ID),
+			}
+			keyboard = append(keyboard, []telebot.InlineButton{disputeButton})
+		}
+
+		return c.Send("⚠️ *Raise a Dispute*\n\nSelect a market to dispute:\n\nDisputing will freeze payouts and notify the admin for review.", &telebot.SendOptions{
+			ParseMode: telebot.ModeMarkdown,
+		}, &telebot.ReplyMarkup{
+			InlineKeyboard: keyboard,
+		})
+	})
+
+	// Register /resolve_disputes command handler (admin only)
+	b.Handle("/resolve_disputes", func(c telebot.Context) error {
+		telegramID := c.Sender().ID
+		logger.Debug(telegramID, "command_resolve_disputes", "")
+
+		// Check if user is admin
+		adminIDStr := os.Getenv("ADMIN_TELEGRAM_ID")
+		if adminIDStr == "" {
+			return c.Send("❌ Admin functionality not configured.")
+		}
+
+		adminID, err := strconv.ParseInt(adminIDStr, 10, 64)
+		if err != nil || telegramID != adminID {
+			logger.Debug(telegramID, "unauthorized_admin_access", fmt.Sprintf("admin_id=%s", adminIDStr))
+			return c.Send("❌ This command is only available to administrators.")
+		}
+
+		// Get disputed markets
+		markets, err := storage.GetDisputedMarkets()
+		if err != nil {
+			logger.Debug(telegramID, "error", fmt.Sprintf("failed to get disputed markets: %v", err))
+			return c.Send("Error retrieving disputed markets. Please try again.")
+		}
+
+		if len(markets) == 0 {
+			return c.Send("✅ *No Disputed Markets*\n\nThere are no markets currently under dispute.\n\nAll markets have been resolved!", &telebot.SendOptions{
+				ParseMode: telebot.ModeMarkdown,
+			})
+		}
+
+		// Build inline keyboard with YES/NO options for each market
+		var keyboard [][]telebot.InlineButton
+		for _, market := range markets {
+			question := market.Question
+			if len(question) > 20 {
+				question = question[:17] + "..."
+			}
+
+			yesButton := telebot.InlineButton{
+				Text: fmt.Sprintf("✅ #%d %s", market.ID, question),
+				Data: fmt.Sprintf("admin_yes_%d", market.ID),
+			}
+			noButton := telebot.InlineButton{
+				Text: fmt.Sprintf("🔴 #%d %s", market.ID, question),
+				Data: fmt.Sprintf("admin_no_%d", market.ID),
+			}
+			keyboard = append(keyboard, []telebot.InlineButton{yesButton, noButton})
+		}
+
+		return c.Send("🔨 *Resolve Disputed Markets*\n\nSelect outcome for each market:\n\nYour decision is final and will distribute payouts immediately.", &telebot.SendOptions{
+			ParseMode: telebot.ModeMarkdown,
+		}, &telebot.ReplyMarkup{
+			InlineKeyboard: keyboard,
+		})
+	})
+
+	// Register universal callback query handler for all interactive buttons
 	b.Handle(telebot.OnCallback, func(c telebot.Context) error {
 		telegramID := c.Sender().ID
 		callback := c.Callback()
@@ -592,77 +695,213 @@ func StartBot() {
 		callbackData := callback.Data
 		logger.Debug(telegramID, "callback_received", fmt.Sprintf("unique=%s data=%s", callback.Unique, callbackData))
 
-		// Check if this is a resolution callback
-		if !strings.HasPrefix(callbackData, "resolve_") {
-			logger.Debug(telegramID, "callback_ignored", fmt.Sprintf("not a resolve callback: %s", callbackData))
-			return nil // Not our callback, ignore
+		// Route to appropriate handler based on callback prefix
+		if strings.HasPrefix(callbackData, "resolve_") {
+			// Market resolution by creator
+			return handleResolveCallback(c, telegramID, callbackData)
+		} else if strings.HasPrefix(callbackData, "dispute_") {
+			// Dispute raised by user
+			return handleDisputeCallback(c, telegramID, callbackData)
+		} else if strings.HasPrefix(callbackData, "admin_") {
+			// Admin resolution of disputed market
+			return handleAdminResolveCallback(c, telegramID, callbackData)
 		}
 
-		// Parse callback: resolve_{marketID}_{outcome}
-		parts := strings.Split(callbackData, "_")
-		if len(parts) != 3 {
-			logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid format: %s", callbackData))
-			return c.Respond(&telebot.CallbackResponse{Text: "❌ Invalid button format"})
-		}
-
-		marketIDStr := parts[1]
-		outcome := strings.ToUpper(parts[2])
-
-		marketID, err := strconv.ParseInt(marketIDStr, 10, 64)
-		if err != nil {
-			logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid_market_id: %s", marketIDStr))
-			return c.Respond(&telebot.CallbackResponse{Text: "❌ Invalid market ID"})
-		}
-
-		logger.Debug(telegramID, "callback_resolve_start", fmt.Sprintf("market_id=%d outcome=%s", marketID, outcome))
-
-		// Get user
-		user, err := storage.GetUserByTelegramID(telegramID)
-		if err != nil || user == nil {
-			logger.Debug(telegramID, "error", "user_not_found")
-			return c.Respond(&telebot.CallbackResponse{Text: "You haven't started the bot yet. Use /start!"})
-		}
-
-		// Resolve market
-		payoutService := service.NewPayoutService()
-		err = payoutService.ResolveMarket(context.Background(), marketID, user.ID, outcome)
-		if err != nil {
-			logger.Debug(telegramID, "resolve_error", fmt.Sprintf("market_id=%d error=%s", marketID, err.Error()))
-			return c.Respond(&telebot.CallbackResponse{
-				Text:      fmt.Sprintf("❌ Resolution Failed: %s", err.Error()),
-				ShowAlert: true,
-			})
-		}
-
-		logger.Debug(telegramID, "market_resolved", fmt.Sprintf("market_id=%d outcome=%s", marketID, outcome))
-
-		// Get market info for the confirmation message
-		market, _ := storage.GetMarketByID(marketID)
-		marketInfo := ""
-		if market != nil {
-			question := market.Question
-			if len(question) > 40 {
-				question = question[:37] + "..."
-			}
-			marketInfo = fmt.Sprintf("\n\n📝 *%s*", escapeMarkdown(question))
-		}
-
-		outcomeEmoji := "✅"
-		if outcome == "NO" {
-			outcomeEmoji = "🔴"
-		}
-
-		// Edit the original message to show confirmation
-		_ = c.Edit(fmt.Sprintf("%s *Market Resolved as %s*%s\n\nMarket #%d has been resolved.\n\nPayouts will be distributed after the dispute period.", outcomeEmoji, outcome, marketInfo, marketID), &telebot.SendOptions{
-			ParseMode: telebot.ModeMarkdown,
-		})
-
-		// Respond to callback
-		return c.Respond(&telebot.CallbackResponse{Text: fmt.Sprintf("✅ Resolved as %s!", outcome)})
+		logger.Debug(telegramID, "callback_ignored", fmt.Sprintf("unknown callback: %s", callbackData))
+		return nil
 	})
 
 	log.Println("Bot started. Use /start command to test.")
 
 	// Start polling for updates
 	b.Start()
+}
+
+// handleResolveCallback handles market resolution callbacks from creators
+func handleResolveCallback(c telebot.Context, telegramID int64, callbackData string) error {
+	// Parse callback: resolve_{marketID}_{outcome}
+	parts := strings.Split(callbackData, "_")
+	if len(parts) != 3 {
+		logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid resolve format: %s", callbackData))
+		return c.Respond(&telebot.CallbackResponse{Text: "❌ Invalid button format"})
+	}
+
+	marketIDStr := parts[1]
+	outcome := strings.ToUpper(parts[2])
+
+	marketID, err := strconv.ParseInt(marketIDStr, 10, 64)
+	if err != nil {
+		logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid_market_id: %s", marketIDStr))
+		return c.Respond(&telebot.CallbackResponse{Text: "❌ Invalid market ID"})
+	}
+
+	logger.Debug(telegramID, "callback_resolve_start", fmt.Sprintf("market_id=%d outcome=%s", marketID, outcome))
+
+	// Get user
+	user, err := storage.GetUserByTelegramID(telegramID)
+	if err != nil || user == nil {
+		logger.Debug(telegramID, "error", "user_not_found")
+		return c.Respond(&telebot.CallbackResponse{Text: "You haven't started the bot yet. Use /start!"})
+	}
+
+	// Resolve market
+	payoutService := service.NewPayoutService()
+	err = payoutService.ResolveMarket(context.Background(), marketID, user.ID, outcome)
+	if err != nil {
+		logger.Debug(telegramID, "resolve_error", fmt.Sprintf("market_id=%d error=%s", marketID, err.Error()))
+		return c.Respond(&telebot.CallbackResponse{
+			Text:      fmt.Sprintf("❌ Resolution Failed: %s", err.Error()),
+			ShowAlert: true,
+		})
+	}
+
+	logger.Debug(telegramID, "market_resolved", fmt.Sprintf("market_id=%d outcome=%s", marketID, outcome))
+
+	// Get market info for confirmation
+	market, _ := storage.GetMarketByID(marketID)
+	marketInfo := ""
+	if market != nil {
+		question := market.Question
+		if len(question) > 40 {
+			question = question[:37] + "..."
+		}
+		marketInfo = fmt.Sprintf("\n\n📝 *%s*", escapeMarkdown(question))
+	}
+
+	outcomeEmoji := "✅"
+	if outcome == "NO" {
+		outcomeEmoji = "🔴"
+	}
+
+	// Edit the original message
+	_ = c.Edit(fmt.Sprintf("%s *Market Resolved as %s*%s\n\nMarket #%d has been resolved.\n\nPayouts will be distributed after the dispute period.", outcomeEmoji, outcome, marketInfo, marketID), &telebot.SendOptions{
+		ParseMode: telebot.ModeMarkdown,
+	})
+
+	return c.Respond(&telebot.CallbackResponse{Text: fmt.Sprintf("✅ Resolved as %s!", outcome)})
+}
+
+// handleDisputeCallback handles dispute callbacks from users
+func handleDisputeCallback(c telebot.Context, telegramID int64, callbackData string) error {
+	// Parse callback: dispute_{marketID}
+	parts := strings.Split(callbackData, "_")
+	if len(parts) != 2 {
+		logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid dispute format: %s", callbackData))
+		return c.Respond(&telebot.CallbackResponse{Text: "❌ Invalid button format"})
+	}
+
+	marketIDStr := parts[1]
+	marketID, err := strconv.ParseInt(marketIDStr, 10, 64)
+	if err != nil {
+		logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid_market_id: %s", marketIDStr))
+		return c.Respond(&telebot.CallbackResponse{Text: "❌ Invalid market ID"})
+	}
+
+	logger.Debug(telegramID, "callback_dispute_start", fmt.Sprintf("market_id=%d", marketID))
+
+	// Get user
+	user, err := storage.GetUserByTelegramID(telegramID)
+	if err != nil || user == nil {
+		logger.Debug(telegramID, "error", "user_not_found")
+		return c.Respond(&telebot.CallbackResponse{Text: "You haven't started the bot yet. Use /start!"})
+	}
+
+	// Raise dispute
+	payoutService := service.NewPayoutService()
+	err = payoutService.RaiseDispute(context.Background(), marketID, user.ID)
+	if err != nil {
+		logger.Debug(telegramID, "dispute_error", fmt.Sprintf("market_id=%d error=%s", marketID, err.Error()))
+		return c.Respond(&telebot.CallbackResponse{
+			Text:      fmt.Sprintf("❌ Dispute Failed: %s", err.Error()),
+			ShowAlert: true,
+		})
+	}
+
+	logger.Debug(telegramID, "dispute_raised", fmt.Sprintf("market_id=%d user_id=%d", marketID, user.ID))
+
+	// Get market info
+	market, _ := storage.GetMarketByID(marketID)
+	marketInfo := ""
+	if market != nil {
+		question := market.Question
+		if len(question) > 40 {
+			question = question[:37] + "..."
+		}
+		marketInfo = fmt.Sprintf("\n\n📝 %s", question)
+	}
+
+	// Edit message
+	_ = c.Edit(fmt.Sprintf("⚠️ *Dispute Raised*%s\n\nMarket #%d is now under dispute.\n\nPayouts are frozen. An admin will review and make the final decision.", marketInfo, marketID), &telebot.SendOptions{
+		ParseMode: telebot.ModeMarkdown,
+	})
+
+	return c.Respond(&telebot.CallbackResponse{Text: "✅ Dispute raised successfully!"})
+}
+
+// handleAdminResolveCallback handles admin resolution of disputed markets
+func handleAdminResolveCallback(c telebot.Context, telegramID int64, callbackData string) error {
+	// Verify admin
+	adminIDStr := os.Getenv("ADMIN_TELEGRAM_ID")
+	if adminIDStr == "" {
+		return c.Respond(&telebot.CallbackResponse{Text: "❌ Admin not configured", ShowAlert: true})
+	}
+
+	adminID, err := strconv.ParseInt(adminIDStr, 10, 64)
+	if err != nil || telegramID != adminID {
+		logger.Debug(telegramID, "unauthorized_admin_callback", "")
+		return c.Respond(&telebot.CallbackResponse{Text: "❌ Admin only", ShowAlert: true})
+	}
+
+	// Parse callback: admin_{outcome}_{marketID}
+	parts := strings.Split(callbackData, "_")
+	if len(parts) != 3 {
+		logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid admin format: %s", callbackData))
+		return c.Respond(&telebot.CallbackResponse{Text: "❌ Invalid format"})
+	}
+
+	outcome := strings.ToUpper(parts[1])
+	marketIDStr := parts[2]
+	marketID, err := strconv.ParseInt(marketIDStr, 10, 64)
+	if err != nil {
+		logger.Debug(telegramID, "callback_error", fmt.Sprintf("invalid_market_id: %s", marketIDStr))
+		return c.Respond(&telebot.CallbackResponse{Text: "❌ Invalid market ID"})
+	}
+
+	logger.Debug(telegramID, "callback_admin_resolve_start", fmt.Sprintf("market_id=%d outcome=%s", marketID, outcome))
+
+	// Finalize market with admin outcome
+	payoutService := service.NewPayoutService()
+	payoutsProcessed, err := payoutService.FinalizeMarket(context.Background(), marketID, outcome)
+	if err != nil {
+		logger.Debug(telegramID, "admin_resolve_error", fmt.Sprintf("market_id=%d error=%s", marketID, err.Error()))
+		return c.Respond(&telebot.CallbackResponse{
+			Text:      fmt.Sprintf("❌ Failed: %s", err.Error()),
+			ShowAlert: true,
+		})
+	}
+
+	logger.Debug(telegramID, "admin_resolved", fmt.Sprintf("market_id=%d outcome=%s payouts=%d", marketID, outcome, payoutsProcessed))
+
+	// Get market info
+	market, _ := storage.GetMarketByID(marketID)
+	marketInfo := ""
+	if market != nil {
+		question := market.Question
+		if len(question) > 40 {
+			question = question[:37] + "..."
+		}
+		marketInfo = fmt.Sprintf("\n\n📝 %s", question)
+	}
+
+	outcomeEmoji := "✅"
+	if outcome == "NO" {
+		outcomeEmoji = "🔴"
+	}
+
+	// Edit message
+	_ = c.Edit(fmt.Sprintf("🔨 *Admin Resolution*%s\n\n%s Final Outcome: *%s*\n\nMarket #%d finalized.\n%d winners received payouts.", marketInfo, outcomeEmoji, outcome, marketID, payoutsProcessed), &telebot.SendOptions{
+		ParseMode: telebot.ModeMarkdown,
+	})
+
+	return c.Respond(&telebot.CallbackResponse{Text: fmt.Sprintf("✅ Finalized as %s! %d payouts distributed.", outcome, payoutsProcessed)})
 }
