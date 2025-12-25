@@ -41,7 +41,7 @@ API Test Suite for Safe Refactoring - COMPLETED
 ## Now
 - Frontend owner controls available for resolving markets
 - DM notifications sent to market owners when deadline passes
-- Bot commands: /resolve_yes, /resolve_no, /my_markets
+- Bot commands: /resolve_yes, /resolve_no, /mymarkets
 - Channel notifications automatically sent when markets are resolved (if CHANNEL_ID configured)
 - Ready to resolve today's deadline markets
 
@@ -84,7 +84,7 @@ Added three key features for market owners to manage their markets:
 **File:** `internal/bot/bot.go`
 - `/resolve_yes <market_id>` - Resolve market as YES (creator only)
 - `/resolve_no <market_id>` - Resolve market as NO (creator only)
-- `/my_markets` - List all markets created by the user
+- `/mymarkets` - List all markets created by the user
 - Creator verification before allowing resolution
 - Success/error responses back to user
 

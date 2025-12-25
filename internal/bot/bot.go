@@ -114,12 +114,15 @@ func StartBot() {
 		telegramID := c.Sender().ID
 		logger.Debug(telegramID, "command_help", "")
 		helpText := "📚 *Available Commands*\n\n" +
-			"/start - Start the bot and receive your welcome bonus\n" +
-			"/balance - Check your current balance\n" +
-			"/me - View your profile and bet history\n" +
+			"/start - Register and get 1000 WSC bonus\n" +
+			"/help - Show this help message\n" +
+			"/balance - Check your WSC balance\n" +
+			"/me - View your profile and stats\n" +
+			"/list - View all active prediction markets\n" +
 			"/mybets - View your active bets\n" +
-			"/list - View all active markets\n" +
-			"/help - Show this help message\n\n" +
+			"/mymarkets - View markets you created\n" +
+			"/resolve_yes <market_id> - Resolve a market as YES (creator only)\n" +
+			"/resolve_no <market_id> - Resolve a market as NO (creator only)\n\n" +
 			"🎯 Open the Prediction Market web app to create markets and place bets!"
 		return c.Send(helpText, &telebot.SendOptions{
 			ParseMode: telebot.ModeMarkdown,
@@ -535,8 +538,8 @@ func StartBot() {
 		})
 	})
 
-	// Register /my_markets command handler
-	b.Handle("/my_markets", func(c telebot.Context) error {
+	// Register /mymarkets command handler
+	b.Handle("/mymarkets", func(c telebot.Context) error {
 		telegramID := c.Sender().ID
 		logger.Debug(telegramID, "command_my_markets", "")
 

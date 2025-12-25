@@ -40,10 +40,15 @@ To simplify the architecture, we use a two-step "Social Consensus" system:
 
 | Command | Description |
 |---------|-------------|
-| `/start` | Start the bot and receive your welcome bonus (1000 WSC). Opens the Prediction Market web app. |
-| `/balance` | Check your current balance in WSC (WiseCoin). |
-| `/me` | View your profile information including name, username, balance, and member since date. |
-| `/help` | Show this help message with available commands. |
+| `/start` | Register and receive 1000 WSC bonus |
+| `/help` | Show available commands |
+| `/balance` | Check your WSC token balance |
+| `/me` | View your profile, stats, and bet history |
+| `/list` | Browse all active prediction markets |
+| `/mybets` | View your active bets on markets |
+| `/mymarkets` | View markets you have created |
+| `/resolve_yes <market_id>` | Resolve your market as YES |
+| `/resolve_no <market_id>` | Resolve your market as NO |
 
 ## 🎮 How to Use
 
